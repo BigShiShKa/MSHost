@@ -1,0 +1,38 @@
+# Build artifacts
+build/
+bin/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+
+# IDE
+.vscode/
+.vs/
+*.suo
+*.user
+CMakeSettings.json
+
+# Runtime
+logs/
+*.log
+
+# Sensitive
+tokens
+config.json
+
+# Backups (replaced by git)
+backup/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Caddy binary & logs
+caddy/caddy.exe
+caddy/caddy_access.log
+
+# Shortcut
+*.lnk

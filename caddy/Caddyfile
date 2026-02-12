@@ -1,0 +1,9 @@
+mshost.serveminecraft.net {
+
+    reverse_proxy 127.0.0.1:8080
+
+    log {
+        output file ../caddy/caddy_access.log
+        format json
+    }
+}

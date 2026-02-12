@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Авторизация</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #eee;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    input {
+      padding: 10px;
+      margin-bottom: 10px;
+      border: none;
+      border-radius: 5px;
+      width: 250px;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px 20px;
+      background-color: #333;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #555;
+    }
+    #error-message {
+      display: none;
+      margin-bottom: 10px;
+      padding: 10px;
+      background-color: rgba(204, 0, 0, 0.7);
+      color: white;
+      border-radius: 5px;
+      width: 250px;
+      text-align: center;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h2>Введите токен для доступа</h2>
+  <input type="password" id="token" placeholder="API Token" />
+  <div id="error-message">Неверный токен!</div>
+  <button onclick="login()">Войти</button>
+
+  <script>
+    async function login() {
+      const token = document.getElementById("token").value.trim();
+      const errorMessage = document.getElementById("error-message");
+
+      errorMessage.style.display = 'none'; // Скрываем ошибку перед новой попыткой
+
+      if (!token) {
+        errorMessage.textContent = "Введите токен!";
+        errorMessage.style.display = "block";
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/status", {
+          headers: {
+            "X-API-Token": token
+          }
+        });
+
+        if (res.status === 200) {
+          // Всё ок — сохраняем и идём дальше
+          localStorage.setItem("api_token", token);
+          window.location.href = "index.html";
+        } else if (res.status === 401) {
+          errorMessage.textContent = "Неверный токен!";
+          errorMessage.style.display = "block";
+        } else {
+          errorMessage.textContent = "Ошибка сервера. Попробуйте позже.";
+          errorMessage.style.display = "block";
+        }
+      } catch (e) {
+        errorMessage.textContent = "Не удалось подключиться к серверу.";
+        errorMessage.style.display = "block";
+      }
+    }
+  </script>
+</body>
+</html>
