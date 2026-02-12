@@ -12,6 +12,9 @@ let scrollTimeout = null;
 let currentStatusCode = "unknown";
 // Текущая роль пользователя
 let currentRole = "user";
+// Флаг: ядро выключается
+let isShuttingDown = false;
+let statusFailCount = 0;
 
 // ── Хелпер авторизации ───────────────────────────────────────────
 
@@ -274,8 +277,6 @@ function kickToAuth() {
 // ── Скачивание модпака (admin only) ────────────────────────────
 
 function downloadModpack() {
-    if (currentRole !== 'admin') return;
-
     const auth = getAuthHeader();
     if (!auth) return;
 
@@ -372,6 +373,8 @@ async function sendCommand() {
 // ── Обновление статуса ─────────────────────────────────────────
 
 async function updateStatus() {
+    if (isShuttingDown) return;
+
     const auth = getAuthHeader();
     if (!auth) return;
 
@@ -382,6 +385,8 @@ async function updateStatus() {
 
         if (res.status === 401) return kickToAuth();
         if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+
+        statusFailCount = 0;
 
         const data = await res.json();
 
@@ -403,11 +408,51 @@ async function updateStatus() {
             connectEl.innerText = data.ip + ":" + data.port;
         }
     } catch (e) {
+        statusFailCount++;
+        // После 3 подряд неудачных запросов — показываем страницу выключения
+        if (statusFailCount >= 3) {
+            isShuttingDown = true;
+            showShutdownPage();
+            return;
+        }
         document.getElementById("status").innerText = "Ошибка при получении статуса";
         document.getElementById("server-ip").innerText = "—";
         document.getElementById("server-port").innerText = "—";
         document.getElementById("server-version").innerText = "—";
     }
+}
+
+// ── Страница выключения ──────────────────────────────────────
+
+function showShutdownPage() {
+    if (document.getElementById('shutdown-overlay')) return;
+
+    // Останавливаем все интервалы
+    if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
+    if (logInterval) { clearInterval(logInterval); logInterval = null; }
+    if (playerInterval) { clearInterval(playerInterval); playerInterval = null; }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'shutdown-overlay';
+    overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        z-index: 9999; color: #e0e0e0; font-family: 'Segoe UI', Roboto, sans-serif;
+        animation: fadeIn 0.5s ease-out;
+    `;
+    overlay.innerHTML = `
+        <div style="text-align: center; padding: 40px;">
+            <div style="font-size: 64px; margin-bottom: 24px;">&#x1F6D1;</div>
+            <h1 style="font-size: 2rem; margin-bottom: 16px; background: linear-gradient(90deg, #ff6464, #ff9080); -webkit-background-clip: text; background-clip: text; color: transparent;">
+                Сервер выключается
+            </h1>
+            <p style="font-size: 1.1rem; color: #a0a0b0; max-width: 400px; line-height: 1.6;">
+                MSHost завершает работу.<br>До встречи!
+            </p>
+        </div>
+    `;
+    document.body.appendChild(overlay);
 }
 
 // ── Выключение ядра (admin only) ──────────────────────────────
@@ -419,19 +464,18 @@ async function exitProgram() {
     const auth = getAuthHeader();
     if (!auth) return;
 
+    isShuttingDown = true;
+
     try {
-        const res = await fetch('/api/exit', {
+        await fetch('/api/exit', {
             method: 'POST',
             headers: { "Authorization": auth }
         });
-
-        if (res.status === 401) return kickToAuth();
-        if (res.status === 403) { alert("Недостаточно прав"); return; }
-
-        document.getElementById("status").innerText = "Ядро выключается...";
     } catch (e) {
-        document.getElementById("status").innerText = "Ядро выключается...";
+        // Сервер мог уже упасть — это нормально
     }
+
+    showShutdownPage();
 }
 
 // ── Отправка POST-действия ─────────────────────────────────────

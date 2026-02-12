@@ -247,10 +247,12 @@ void HttpServer::setup_routes() {
             tl_current_role = role;
         }
 
-        // HTTPS проверка
+        // HTTPS проверка: разрешаем только запросы через Caddy (X-Forwarded-Proto: https)
+        // или с localhost (для локальной отладки)
         std::string proto = req.get_header_value("X-Forwarded-Proto");
         if (proto.empty()) proto = req.get_header_value("X-Forwarded-Scheme");
-        if (proto != "https" && !proto.empty()) {
+        bool is_local = (req.remote_addr == "127.0.0.1" || req.remote_addr == "::1");
+        if (proto != "https" && !is_local) {
             res.status = 403;
             res.set_content("HTTPS required", "text/plain");
             return httplib::Server::HandlerResponse::Handled;
@@ -331,9 +333,8 @@ void HttpServer::setup_routes() {
         }
     });
 
-    // ── GET /api/download-modpack (admin only) ──
-    svr.Get("/api/download-modpack", [this, require_admin](const httplib::Request&, httplib::Response& res) {
-        if (!require_admin(res)) return;
+    // ── GET /api/download-modpack (all roles) ──
+    svr.Get("/api/download-modpack", [this](const httplib::Request&, httplib::Response& res) {
         if (!fs::exists(config_.modpack_path)) {
             LOG_ERR("Файл не существует: " + config_.modpack_path, "WEB");
             res.status = 404;

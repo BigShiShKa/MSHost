@@ -150,7 +150,7 @@ viewer:viewerpass:user
 | `/api/status` | any | Статус сервера, IP, порт, версия, роль |
 | `/api/players` | any | Список игроков онлайн |
 | `/api/logs` | admin | Последние N строк лога |
-| `/api/download-modpack` | admin | Скачать модпак |
+| `/api/download-modpack` | any | Скачать модпак |
 
 ### POST (действия, admin only)
 
