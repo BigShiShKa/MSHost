@@ -44,7 +44,7 @@ static const wchar_t* HELP_TEXT =
     L"  web-start        : Запускает Web Server\n"
     L"  web-stop         : Останавливает Web Server\n"
     L"  web-restart      : Перезапускает Web Server\n"
-    L"  web-updatetokens : Перечитывает файл токенов\n"
+    L"  web-updatecreds  : Перечитывает файл учётных данных\n"
     L"  exit             : Останавливает ВСЕ и завершает программу\n"
     L"  help             : Выводит список команд\n"
     L"  prank <игрок>    : Наносит психоурон игроку)))\n"
@@ -162,9 +162,9 @@ void handle_input(MinecraftServerManager& manager, HttpServer& http) {
             stop_web(http);
             start_web(http);
         }
-        else if (command == "web-updatetokens") {
-            http.load_tokens();
-            LOG_INFO("Команда обновления токенов выполнена", "INPUT");
+        else if (command == "web-updatecreds") {
+            http.load_credentials();
+            LOG_INFO("Учётные данные обновлены", "INPUT");
         }
         else if (command == "server-status") {
             LOG_INFO("Запрос статуса сервера", "INPUT");

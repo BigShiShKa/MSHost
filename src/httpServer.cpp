@@ -17,6 +17,44 @@ namespace fs = std::filesystem;
 static thread_local std::string tl_current_role;
 
 // ────────────────────────────────────────────────────────────────
+// Base64 decode (для HTTP Basic Auth)
+// ────────────────────────────────────────────────────────────────
+static std::string base64_decode(const std::string& in) {
+    static constexpr unsigned char table[256] = {
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,62,64,64,64,63,
+        52,53,54,55,56,57,58,59,60,61,64,64,64,64,64,64,
+        64, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
+        15,16,17,18,19,20,21,22,23,24,25,64,64,64,64,64,
+        64,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,
+        41,42,43,44,45,46,47,48,49,50,51,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,
+        64,64,64,64,64,64,64,64,64,64,64,64,64,64,64,64
+    };
+    std::string out;
+    out.reserve(in.size() * 3 / 4);
+    unsigned val = 0;
+    int bits = -8;
+    for (unsigned char c : in) {
+        if (table[c] == 64) break;
+        val = (val << 6) | table[c];
+        bits += 6;
+        if (bits >= 0) {
+            out.push_back(static_cast<char>((val >> bits) & 0xFF));
+            bits -= 8;
+        }
+    }
+    return out;
+}
+
+// ────────────────────────────────────────────────────────────────
 // Статусы: локализованные строки + machine-readable коды
 // ────────────────────────────────────────────────────────────────
 static std::string status_to_string(ServerStatus status) {
@@ -80,13 +118,13 @@ HttpServer::HttpServer(MinecraftServerManager& manager,
       manager_(manager),
       config_(config)
 {
-    load_tokens();
+    load_credentials();
     setup_routes();
 }
 
-void HttpServer::load_tokens() {
-    std::lock_guard lg(tokens_mx_);
-    std::unordered_map<std::string, std::string> fresh;
+void HttpServer::load_credentials() {
+    std::lock_guard lg(credentials_mx_);
+    std::unordered_map<std::string, Credential> fresh;
     std::ifstream f(config_.tokens_file);
     if (!f) {
         LOG_ERR("Не смог открыть " + config_.tokens_file, "WEB");
@@ -98,24 +136,29 @@ void HttpServer::load_tokens() {
         line.erase(line.find_last_not_of(" \t\r\n") + 1);
         if (line.empty() || line[0] == '#') continue;
 
-        auto colon = line.rfind(':');
-        if (colon != std::string::npos) {
-            std::string token = line.substr(0, colon);
-            std::string role  = line.substr(colon + 1);
-            if (role != "admin" && role != "user") role = "admin";
-            fresh[token] = role;
-        } else {
-            fresh[line] = "admin";  // обратная совместимость
-        }
+        // Формат: login:password:role
+        auto first_colon = line.find(':');
+        auto last_colon  = line.rfind(':');
+        if (first_colon == std::string::npos || first_colon == last_colon) continue;
+
+        std::string login    = line.substr(0, first_colon);
+        std::string role     = line.substr(last_colon + 1);
+        std::string password = line.substr(first_colon + 1, last_colon - first_colon - 1);
+
+        if (login.empty() || password.empty()) continue;
+        if (role != "admin" && role != "user") role = "admin";
+
+        fresh[login] = Credential{password, role};
     }
-    tokens_.swap(fresh);
-    LOG_INFO("Токены перечитаны, всего: " + std::to_string(tokens_.size()), "WEB");
+    credentials_.swap(fresh);
+    LOG_INFO("Учётные данные загружены, всего: " + std::to_string(credentials_.size()), "WEB");
 }
 
-std::string HttpServer::check_token(const std::string& t) {
-    std::lock_guard lg(tokens_mx_);
-    auto it = tokens_.find(t);
-    if (it != tokens_.end()) return it->second;
+std::string HttpServer::check_auth(const std::string& login, const std::string& password) {
+    std::lock_guard lg(credentials_mx_);
+    auto it = credentials_.find(login);
+    if (it != credentials_.end() && it->second.password == password)
+        return it->second.role;
     return "";
 }
 
@@ -175,16 +218,21 @@ void HttpServer::setup_routes() {
 
         LOG_INFO("[" + client_ip + "] " + req.method + " " + req.path, "WEB");
 
-        // Аутентификация API-эндпоинтов
+        // Аутентификация API-эндпоинтов (HTTP Basic Auth)
         if (req.path.rfind("/api/", 0) == 0) {
-            auto token = req.get_header_value("X-API-Token");
-            if (token.empty()) {
-                auto it = req.params.find("token");
-                if (it != req.params.end()) {
-                    token = it->second;
+            auto auth_header = req.get_header_value("Authorization");
+            std::string login, password;
+
+            if (auth_header.rfind("Basic ", 0) == 0) {
+                std::string decoded = base64_decode(auth_header.substr(6));
+                auto colon = decoded.find(':');
+                if (colon != std::string::npos) {
+                    login = decoded.substr(0, colon);
+                    password = decoded.substr(colon + 1);
                 }
             }
-            std::string role = check_token(token);
+
+            std::string role = check_auth(login, password);
             if (role.empty()) {
                 res.status = 401;
                 res.set_content("Unauthorized", "text/plain");

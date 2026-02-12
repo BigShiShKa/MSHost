@@ -13,22 +13,30 @@ let currentStatusCode = "unknown";
 // Текущая роль пользователя
 let currentRole = "user";
 
-window.addEventListener("DOMContentLoaded", async () => {
-    const token = localStorage.getItem("api_token");
+// ── Хелпер авторизации ───────────────────────────────────────────
 
-    if (!token) {
+function getAuthHeader() {
+    const login = localStorage.getItem("auth_login");
+    const password = localStorage.getItem("auth_password");
+    if (!login || !password) return null;
+    return "Basic " + btoa(login + ":" + password);
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+    const auth = getAuthHeader();
+
+    if (!auth) {
         window.location.href = "auth.html";
         return;
     }
 
-    // Валидация токена при загрузке страницы
+    // Валидация при загрузке страницы
     try {
         const res = await fetch("/api/status", {
-            headers: { "X-API-Token": token }
+            headers: { "Authorization": auth }
         });
         if (res.status === 401) {
-            localStorage.removeItem("api_token");
-            window.location.href = "auth.html";
+            kickToAuth();
             return;
         }
         if (res.ok) {
@@ -110,11 +118,11 @@ function scrollLogsToBottom() {
 async function updateLogs() {
     if (currentRole !== 'admin') return;
 
-    const token = localStorage.getItem("api_token");
-    if (!token) return;
+    const auth = getAuthHeader();
+    if (!auth) return;
 
     try {
-        const res = await fetch("/api/logs", { headers: { "X-API-Token": token } });
+        const res = await fetch("/api/logs", { headers: { "Authorization": auth } });
         if (res.status === 401) return kickToAuth();
         if (res.status === 403) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -153,12 +161,12 @@ async function updateLogs() {
 // ── Обновление игроков ─────────────────────────────────────────
 
 async function updatePlayers() {
-    const token = localStorage.getItem("api_token");
-    if (!token) return;
+    const auth = getAuthHeader();
+    if (!auth) return;
 
     try {
         const res = await fetch('/api/players', {
-            headers: { "X-API-Token": token }
+            headers: { "Authorization": auth }
         });
         if (res.status === 401) return kickToAuth();
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -212,8 +220,8 @@ async function updatePlayers() {
 }
 
 async function playerAction(action, player) {
-    const token = localStorage.getItem("api_token");
-    if (!token) return;
+    const auth = getAuthHeader();
+    if (!auth) return;
 
     const label = action === 'kick' ? 'кика' : 'бана';
     const reason = prompt(`Причина ${label} для ${player}:`, '');
@@ -224,7 +232,7 @@ async function playerAction(action, player) {
             method: 'POST',
             headers: {
                 "Content-Type": "application/json",
-                "X-API-Token": token
+                "Authorization": auth
             },
             body: JSON.stringify({ player, reason: reason || undefined })
         });
@@ -256,8 +264,9 @@ function startStatusLoop() {
 function kickToAuth() {
     if (!alertShown) {
         alertShown = true;
-        alert("Неверный API Token! Повторите вход.");
-        localStorage.removeItem("api_token");
+        alert("Сессия истекла. Повторите вход.");
+        localStorage.removeItem("auth_login");
+        localStorage.removeItem("auth_password");
         window.location.href = "auth.html";
     }
 }
@@ -267,13 +276,13 @@ function kickToAuth() {
 function downloadModpack() {
     if (currentRole !== 'admin') return;
 
-    const token = localStorage.getItem("api_token");
-    if (!token) return;
+    const auth = getAuthHeader();
+    if (!auth) return;
 
     document.getElementById("status").innerText = "Скачиваю модпак...";
 
     fetch("/api/download-modpack", {
-        headers: { "X-API-Token": token }
+        headers: { "Authorization": auth }
     })
     .then(res => {
         if (res.status === 401) { kickToAuth(); return; }
@@ -310,7 +319,7 @@ async function sendCommand() {
     if (currentRole !== 'admin') return;
     if (isCommandProcessing) return;
 
-    const token = localStorage.getItem("api_token");
+    const auth = getAuthHeader();
     const cmdInput = document.getElementById("command");
     const cmd = cmdInput.value.trim();
 
@@ -335,7 +344,7 @@ async function sendCommand() {
                 method: 'POST',
                 headers: {
                     "Content-Type": "application/json",
-                    "X-API-Token": token
+                    "Authorization": auth
                 },
                 body: JSON.stringify({ command: cmd })
             });
@@ -363,12 +372,12 @@ async function sendCommand() {
 // ── Обновление статуса ─────────────────────────────────────────
 
 async function updateStatus() {
-    const token = localStorage.getItem("api_token");
-    if (!token) return;
+    const auth = getAuthHeader();
+    if (!auth) return;
 
     try {
         const res = await fetch('/api/status', {
-            headers: { "X-API-Token": token }
+            headers: { "Authorization": auth }
         });
 
         if (res.status === 401) return kickToAuth();
@@ -404,13 +413,13 @@ async function updateStatus() {
 // ── Отправка POST-действия ─────────────────────────────────────
 
 async function send(path) {
-    const token = localStorage.getItem("api_token");
-    if (!token) return alert("Введите API Token");
+    const auth = getAuthHeader();
+    if (!auth) return alert("Авторизуйтесь для выполнения действия");
 
     try {
         const res = await fetch(path, {
             method: 'POST',
-            headers: { "X-API-Token": token }
+            headers: { "Authorization": auth }
         });
 
         if (res.status === 401) return kickToAuth();

@@ -48,20 +48,26 @@
   </style>
 </head>
 <body>
-  <h2>Введите токен для доступа</h2>
-  <input type="password" id="token" placeholder="API Token" />
-  <div id="error-message">Неверный токен!</div>
+  <h2>Вход в панель управления</h2>
+  <input type="text" id="login" placeholder="Логин" autocomplete="username" />
+  <input type="password" id="password" placeholder="Пароль" autocomplete="current-password" />
+  <div id="error-message">Неверный логин или пароль!</div>
   <button onclick="login()">Войти</button>
 
   <script>
+    document.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') login();
+    });
+
     async function login() {
-      const token = document.getElementById("token").value.trim();
+      const loginVal = document.getElementById("login").value.trim();
+      const passwordVal = document.getElementById("password").value;
       const errorMessage = document.getElementById("error-message");
 
-      errorMessage.style.display = 'none'; // Скрываем ошибку перед новой попыткой
+      errorMessage.style.display = 'none';
 
-      if (!token) {
-        errorMessage.textContent = "Введите токен!";
+      if (!loginVal || !passwordVal) {
+        errorMessage.textContent = "Введите логин и пароль!";
         errorMessage.style.display = "block";
         return;
       }
@@ -69,16 +75,16 @@
       try {
         const res = await fetch("/api/status", {
           headers: {
-            "X-API-Token": token
+            "Authorization": "Basic " + btoa(loginVal + ":" + passwordVal)
           }
         });
 
         if (res.status === 200) {
-          // Всё ок — сохраняем и идём дальше
-          localStorage.setItem("api_token", token);
+          localStorage.setItem("auth_login", loginVal);
+          localStorage.setItem("auth_password", passwordVal);
           window.location.href = "index.html";
         } else if (res.status === 401) {
-          errorMessage.textContent = "Неверный токен!";
+          errorMessage.textContent = "Неверный логин или пароль!";
           errorMessage.style.display = "block";
         } else {
           errorMessage.textContent = "Ошибка сервера. Попробуйте позже.";

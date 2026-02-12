@@ -38,7 +38,7 @@ public:
 
     void run();
     void stop();
-    void load_tokens();
+    void load_credentials();
 
 private:
     std::atomic<bool>& running_;
@@ -48,15 +48,19 @@ private:
 
     nlohmann::json get_status_json();
 
-    std::unordered_map<std::string, std::string> tokens_;  // token → role ("admin"/"user")
-    std::mutex tokens_mx_;
+    struct Credential {
+        std::string password;
+        std::string role;  // "admin" / "user"
+    };
+    std::unordered_map<std::string, Credential> credentials_;  // login → {password, role}
+    std::mutex credentials_mx_;
 
     // Rate limiter
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> rate_map_;
     std::mutex rate_mx_;
     void cleanup_rate_map();
 
-    std::string check_token(const std::string&);  // returns role or "" if invalid
+    std::string check_auth(const std::string& login, const std::string& password);  // → role or ""
 
     void setup_routes();
 };
