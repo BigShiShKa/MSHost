@@ -410,6 +410,30 @@ async function updateStatus() {
     }
 }
 
+// ── Выключение ядра (admin only) ──────────────────────────────
+
+async function exitProgram() {
+    if (currentRole !== 'admin') return;
+    if (!confirm("Вы уверены? Это полностью выключит MSHost.")) return;
+
+    const auth = getAuthHeader();
+    if (!auth) return;
+
+    try {
+        const res = await fetch('/api/exit', {
+            method: 'POST',
+            headers: { "Authorization": auth }
+        });
+
+        if (res.status === 401) return kickToAuth();
+        if (res.status === 403) { alert("Недостаточно прав"); return; }
+
+        document.getElementById("status").innerText = "Ядро выключается...";
+    } catch (e) {
+        document.getElementById("status").innerText = "Ядро выключается...";
+    }
+}
+
 // ── Отправка POST-действия ─────────────────────────────────────
 
 async function send(path) {

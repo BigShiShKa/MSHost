@@ -61,6 +61,7 @@ public:
     ServerStatus get_status()  const;  // Текущий статус
 
     void send_command(const std::string& command);  // Передать консольную команду
+    void reload_config(const json& config_data);   // Перечитать конфиг
 
     // RCON
     struct PlayerList {

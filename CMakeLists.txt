@@ -1,14 +1,18 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.15)
 project(mshost)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Статическая линковка MSVC runtime (/MT вместо /MD)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # Исходные файлы
 set(SOURCES
    src/main.cpp
    src/MinecraftServerManager.cpp
+   src/CaddyManager.cpp
    src/httpServer.cpp
    src/rcon_client.cpp
 )
@@ -33,7 +37,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 # Предупреждения компилятора
 if(MSVC)
-   target_compile_options(${PROJECT_NAME} PRIVATE /W4)
+   target_compile_options(${PROJECT_NAME} PRIVATE /W4 /utf-8)
 else()
    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
 endif()

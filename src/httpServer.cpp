@@ -154,6 +154,12 @@ void HttpServer::load_credentials() {
     LOG_INFO("Учётные данные загружены, всего: " + std::to_string(credentials_.size()), "WEB");
 }
 
+void HttpServer::update_config(const WebConfig& config) {
+    config_ = config;
+    load_credentials();
+    LOG_INFO("Конфигурация веб-сервера обновлена", "WEB");
+}
+
 std::string HttpServer::check_auth(const std::string& login, const std::string& password) {
     std::lock_guard lg(credentials_mx_);
     auto it = credentials_.find(login);
@@ -197,20 +203,20 @@ void HttpServer::setup_routes() {
         if (client_ip.empty()) client_ip = req.get_header_value("X-Forwarded-For");
         if (client_ip.empty()) client_ip = req.remote_addr;
 
-        // Rate limiting (потокобезопасный)
-        {
+        // Rate limiting — только для POST API-действий (потокобезопасный)
+        if (req.path.rfind("/api/", 0) == 0 && req.method == "POST") {
+            std::string rate_key = client_ip + "|" + req.path;
             std::lock_guard lg(rate_mx_);
 
             auto now = std::chrono::steady_clock::now();
-            auto it = rate_map_.find(client_ip);
+            auto it = rate_map_.find(rate_key);
             if (it != rate_map_.end() &&
                 now - it->second < std::chrono::milliseconds(config_.rate_limit_ms)) {
                 res.status = 429;
                 return httplib::Server::HandlerResponse::Handled;
             }
-            rate_map_[client_ip] = now;
+            rate_map_[rate_key] = now;
 
-            // Периодическая очистка (каждые 100 записей)
             if (rate_map_.size() > 100) {
                 cleanup_rate_map();
             }
@@ -494,6 +500,20 @@ void HttpServer::setup_routes() {
         } catch (...) {
             res.status = 400;
             res.set_content(json{{"error", "invalid request"}}.dump(), "application/json");
+        }
+    });
+
+    // ── POST /api/exit (admin only) — завершение программы ──
+    svr.Post("/api/exit", [this, require_admin](const httplib::Request&, httplib::Response& res) {
+        if (!require_admin(res)) return;
+        LOG_INFO("Запрошено завершение программы через API", "WEB");
+        res.set_content(json{{"status", "Завершение..."}}.dump(), "application/json");
+        if (on_exit) {
+            // Запускаем shutdown в отдельном потоке, чтобы ответ успел уйти клиенту
+            std::thread([this]() {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                on_exit();
+            }).detach();
         }
     });
 

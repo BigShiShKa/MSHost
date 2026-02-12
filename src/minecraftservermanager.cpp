@@ -125,6 +125,16 @@ void MinecraftServerManager::load_config(json data) {
     }
 }
 
+void MinecraftServerManager::reload_config(const json& config_data) {
+    try {
+        config_.jvm_args_vec.clear();
+        load_config(config_data);
+        LOG_INFO("Конфигурация MC-сервера перечитана", "MC_INIT");
+    } catch (const std::exception& e) {
+        LOG_ERR(std::string("Ошибка перечитывания конфига MC: ") + e.what(), "MC_INIT");
+    }
+}
+
 /* ---------- Получение текстовой расшифровки Win32-ошибки ---------- */
 std::string MinecraftServerManager::get_last_error_message(DWORD err) {
     LPSTR buf = nullptr;

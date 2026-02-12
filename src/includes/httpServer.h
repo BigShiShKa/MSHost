@@ -5,6 +5,7 @@
 #include "json.hpp"
 #include <iostream>
 #include <atomic>
+#include <functional>
 #include <unordered_map>
 #include <chrono>
 
@@ -39,6 +40,10 @@ public:
     void run();
     void stop();
     void load_credentials();
+    void update_config(const WebConfig& config);
+
+    // Callback для завершения всей программы (вызывается из /api/exit)
+    std::function<void()> on_exit;
 
 private:
     std::atomic<bool>& running_;

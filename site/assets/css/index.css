@@ -184,6 +184,25 @@ h1 {
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
+.exit-btn {
+  width: 100%;
+  background: linear-gradient(135deg, rgba(120, 30, 30, 0.8), rgba(80, 10, 10, 0.8)) !important;
+  color: white;
+  border: 1px solid rgba(255, 60, 60, 0.3) !important;
+  padding: 12px;
+  font-size: clamp(14px, 2vw, 16px);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.exit-btn:hover {
+  background: linear-gradient(135deg, rgba(160, 40, 40, 0.9), rgba(110, 20, 20, 0.9)) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 0, 0, 0.2);
+}
+
 /* Логи и команды */
 
 /* Обновленные стили для контейнера логов */
