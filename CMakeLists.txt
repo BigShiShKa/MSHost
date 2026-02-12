@@ -10,6 +10,7 @@ set(SOURCES
    src/main.cpp
    src/MinecraftServerManager.cpp
    src/httpServer.cpp
+   src/rcon_client.cpp
 )
 
 # Исполняемый файл

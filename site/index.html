@@ -26,7 +26,7 @@
         </div>
       </div>
 
-      <div class="control-buttons">
+      <div class="control-buttons admin-only">
         <div class="buttons-row">
           <button class="control-btn" onclick="send('/api/start')">▶️ Запустить</button>
           <button class="control-btn" onclick="send('/api/stop')">⛔ Остановить</button>
@@ -35,7 +35,15 @@
       </div>
     </div>
 
-    <div class="log-container">
+    <!-- Панель игроков (видна всем) -->
+    <div class="players-panel">
+      <h3 class="panel-header">Игроки онлайн: <span id="player-count">0 / 0</span></h3>
+      <div id="player-list" class="player-list">
+        <div class="no-players">Нет игроков онлайн</div>
+      </div>
+    </div>
+
+    <div class="log-container admin-only">
       <h3 class="log-header">Логи сервера:</h3>
       <div class="log-content-wrapper">
         <pre id="log-box"></pre>

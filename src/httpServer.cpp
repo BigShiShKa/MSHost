@@ -13,6 +13,9 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+// Роль текущего запроса (thread-local, httplib использует thread pool)
+static thread_local std::string tl_current_role;
+
 // ────────────────────────────────────────────────────────────────
 // Статусы: локализованные строки + machine-readable коды
 // ────────────────────────────────────────────────────────────────
@@ -83,7 +86,7 @@ HttpServer::HttpServer(MinecraftServerManager& manager,
 
 void HttpServer::load_tokens() {
     std::lock_guard lg(tokens_mx_);
-    std::unordered_set<std::string> fresh;
+    std::unordered_map<std::string, std::string> fresh;
     std::ifstream f(config_.tokens_file);
     if (!f) {
         LOG_ERR("Не смог открыть " + config_.tokens_file, "WEB");
@@ -93,15 +96,27 @@ void HttpServer::load_tokens() {
     while (std::getline(f, line)) {
         line.erase(0, line.find_first_not_of(" \t\r\n"));
         line.erase(line.find_last_not_of(" \t\r\n") + 1);
-        if (!line.empty() && line[0] != '#') fresh.insert(line);
+        if (line.empty() || line[0] == '#') continue;
+
+        auto colon = line.rfind(':');
+        if (colon != std::string::npos) {
+            std::string token = line.substr(0, colon);
+            std::string role  = line.substr(colon + 1);
+            if (role != "admin" && role != "user") role = "admin";
+            fresh[token] = role;
+        } else {
+            fresh[line] = "admin";  // обратная совместимость
+        }
     }
     tokens_.swap(fresh);
     LOG_INFO("Токены перечитаны, всего: " + std::to_string(tokens_.size()), "WEB");
 }
 
-bool HttpServer::check_token(const std::string& t) {
+std::string HttpServer::check_token(const std::string& t) {
     std::lock_guard lg(tokens_mx_);
-    return tokens_.count(t) > 0;
+    auto it = tokens_.find(t);
+    if (it != tokens_.end()) return it->second;
+    return "";
 }
 
 json HttpServer::get_status_json() {
@@ -169,11 +184,13 @@ void HttpServer::setup_routes() {
                     token = it->second;
                 }
             }
-            if (!check_token(token)) {
+            std::string role = check_token(token);
+            if (role.empty()) {
                 res.status = 401;
                 res.set_content("Unauthorized", "text/plain");
                 return httplib::Server::HandlerResponse::Handled;
             }
+            tl_current_role = role;
         }
 
         // HTTPS проверка
@@ -188,13 +205,36 @@ void HttpServer::setup_routes() {
         return httplib::Server::HandlerResponse::Unhandled;
     });
 
-    // ── GET /api/status ──
+    // Проверка admin-прав
+    auto require_admin = [](httplib::Response& res) -> bool {
+        if (tl_current_role != "admin") {
+            res.status = 403;
+            res.set_content(R"({"error":"Forbidden: admin only"})", "application/json");
+            return false;
+        }
+        return true;
+    };
+
+    // ── GET /api/status (all roles) ──
     svr.Get("/api/status", [this](const httplib::Request&, httplib::Response& res) {
-        res.set_content(get_status_json().dump(), "application/json");
+        json j = get_status_json();
+        j["role"] = tl_current_role;
+        res.set_content(j.dump(), "application/json");
     });
 
-    // ── GET /api/logs ──
-    svr.Get("/api/logs", [this](const httplib::Request&, httplib::Response& res) {
+    // ── GET /api/players (all roles) ──
+    svr.Get("/api/players", [this](const httplib::Request&, httplib::Response& res) {
+        auto players = manager_.get_players();
+        json j;
+        j["online"] = players.online;
+        j["max"]    = players.max;
+        j["names"]  = players.names;
+        res.set_content(j.dump(), "application/json");
+    });
+
+    // ── GET /api/logs (admin only) ──
+    svr.Get("/api/logs", [this, require_admin](const httplib::Request&, httplib::Response& res) {
+        if (!require_admin(res)) return;
         std::ifstream log;
         int attempts = 3;
         while (attempts-- > 0) {
@@ -237,8 +277,9 @@ void HttpServer::setup_routes() {
         }
     });
 
-    // ── GET /api/download-modpack ──
-    svr.Get("/api/download-modpack", [this](const httplib::Request&, httplib::Response& res) {
+    // ── GET /api/download-modpack (admin only) ──
+    svr.Get("/api/download-modpack", [this, require_admin](const httplib::Request&, httplib::Response& res) {
+        if (!require_admin(res)) return;
         if (!fs::exists(config_.modpack_path)) {
             LOG_ERR("Файл не существует: " + config_.modpack_path, "WEB");
             res.status = 404;
@@ -320,22 +361,25 @@ void HttpServer::setup_routes() {
             static_cast<size_t>(file_size), "application/zip", provider);
     });
 
-    // ── POST /api/start ──
-    svr.Post("/api/start", [this](const httplib::Request&, httplib::Response& res) {
+    // ── POST /api/start (admin only) ──
+    svr.Post("/api/start", [this, require_admin](const httplib::Request&, httplib::Response& res) {
+        if (!require_admin(res)) return;
         LOG_INFO("Запрошен запуск сервера через API", "WEB");
         manager_.start();
         res.set_content(get_status_json().dump(), "application/json");
     });
 
-    // ── POST /api/stop ──
-    svr.Post("/api/stop", [this](const httplib::Request&, httplib::Response& res) {
+    // ── POST /api/stop (admin only) ──
+    svr.Post("/api/stop", [this, require_admin](const httplib::Request&, httplib::Response& res) {
+        if (!require_admin(res)) return;
         LOG_INFO("Запрошена остановка сервера через API", "WEB");
         manager_.stop();
         res.set_content(get_status_json().dump(), "application/json");
     });
 
-    // ── POST /api/command ──
-    svr.Post("/api/command", [this](const httplib::Request& req, httplib::Response& res) {
+    // ── POST /api/command (admin only) ──
+    svr.Post("/api/command", [this, require_admin](const httplib::Request& req, httplib::Response& res) {
+        if (!require_admin(res)) return;
         try {
             auto body = json::parse(req.body);
             std::string cmd = body["command"].get<std::string>();
@@ -353,6 +397,52 @@ void HttpServer::setup_routes() {
             LOG_INFO("API команда: " + cmd, "WEB");
             manager_.send_command(cmd);
             res.set_content(get_status_json().dump(), "application/json");
+        } catch (...) {
+            res.status = 400;
+            res.set_content(json{{"error", "invalid request"}}.dump(), "application/json");
+        }
+    });
+
+    // ── POST /api/kick (admin only) ──
+    svr.Post("/api/kick", [this, require_admin](const httplib::Request& req, httplib::Response& res) {
+        if (!require_admin(res)) return;
+        try {
+            auto body = json::parse(req.body);
+            std::string player = body["player"].get<std::string>();
+            std::string reason = body.value("reason", "Kicked by admin");
+
+            if (player.empty() || player.size() > 16) {
+                res.status = 400;
+                res.set_content(R"({"error":"Invalid player name"})", "application/json");
+                return;
+            }
+
+            std::string result = manager_.rcon_command("kick " + player + " " + reason);
+            LOG_INFO("Kick: " + player + " (reason: " + reason + ")", "WEB");
+            res.set_content(json{{"result", result}}.dump(), "application/json");
+        } catch (...) {
+            res.status = 400;
+            res.set_content(json{{"error", "invalid request"}}.dump(), "application/json");
+        }
+    });
+
+    // ── POST /api/ban (admin only) ──
+    svr.Post("/api/ban", [this, require_admin](const httplib::Request& req, httplib::Response& res) {
+        if (!require_admin(res)) return;
+        try {
+            auto body = json::parse(req.body);
+            std::string player = body["player"].get<std::string>();
+            std::string reason = body.value("reason", "Banned by admin");
+
+            if (player.empty() || player.size() > 16) {
+                res.status = 400;
+                res.set_content(R"({"error":"Invalid player name"})", "application/json");
+                return;
+            }
+
+            std::string result = manager_.rcon_command("ban " + player + " " + reason);
+            LOG_INFO("Ban: " + player + " (reason: " + reason + ")", "WEB");
+            res.set_content(json{{"result", result}}.dump(), "application/json");
         } catch (...) {
             res.status = 400;
             res.set_content(json{{"error", "invalid request"}}.dump(), "application/json");

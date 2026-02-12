@@ -1,5 +1,6 @@
 let statusInterval = null;
 let logInterval = null;
+let playerInterval = null;
 let alertShown = false;
 let isCommandProcessing = false;
 const COMMAND_COOLDOWN = 1000;
@@ -9,6 +10,8 @@ let scrollTimeout = null;
 
 // Текущий статус сервера (machine-readable)
 let currentStatusCode = "unknown";
+// Текущая роль пользователя
+let currentRole = "user";
 
 window.addEventListener("DOMContentLoaded", async () => {
     const token = localStorage.getItem("api_token");
@@ -28,24 +31,47 @@ window.addEventListener("DOMContentLoaded", async () => {
             window.location.href = "auth.html";
             return;
         }
+        if (res.ok) {
+            const data = await res.json();
+            if (data.role) {
+                currentRole = data.role;
+            }
+        }
     } catch (e) {
         // Сервер недоступен — показываем страницу, она сама покажет ошибки
     }
 
-    const scrollBtn = document.querySelector('.scroll-down-btn');
-    scrollBtn.addEventListener('click', scrollLogsToBottom);
+    applyRoleVisibility();
 
-    document.querySelector('.log-content-wrapper').addEventListener('scroll', handleLogScroll);
+    const scrollBtn = document.querySelector('.scroll-down-btn');
+    if (scrollBtn) scrollBtn.addEventListener('click', scrollLogsToBottom);
+
+    const logWrapper = document.querySelector('.log-content-wrapper');
+    if (logWrapper) logWrapper.addEventListener('scroll', handleLogScroll);
+
     updateScrollButtonVisibility();
     startStatusLoop();
 
-    document.getElementById('command').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendCommand();
-        }
-    });
+    const cmdInput = document.getElementById('command');
+    if (cmdInput) {
+        cmdInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendCommand();
+            }
+        });
+    }
 });
+
+// ── Управление видимостью по роли ──────────────────────────────
+
+function applyRoleVisibility() {
+    const adminElements = document.querySelectorAll('.admin-only');
+    const display = currentRole === 'admin' ? '' : 'none';
+    adminElements.forEach(el => el.style.display = display);
+}
+
+// ── Скролл логов ───────────────────────────────────────────────
 
 function handleLogScroll() {
     isUserScrolling = true;
@@ -79,13 +105,18 @@ function scrollLogsToBottom() {
     updateScrollButtonVisibility();
 }
 
+// ── Обновление логов (admin only) ──────────────────────────────
+
 async function updateLogs() {
+    if (currentRole !== 'admin') return;
+
     const token = localStorage.getItem("api_token");
     if (!token) return;
 
     try {
         const res = await fetch("/api/logs", { headers: { "X-API-Token": token } });
         if (res.status === 401) return kickToAuth();
+        if (res.status === 403) return;
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const data = await res.json();
@@ -116,20 +147,110 @@ async function updateLogs() {
 
     } catch (e) {
         console.error("[LOG]", e);
-        const logBox = document.getElementById("log-box");
-        if (logBox) {
-            logBox.textContent = "Не удалось загрузить логи";
-        }
     }
 }
+
+// ── Обновление игроков ─────────────────────────────────────────
+
+async function updatePlayers() {
+    const token = localStorage.getItem("api_token");
+    if (!token) return;
+
+    try {
+        const res = await fetch('/api/players', {
+            headers: { "X-API-Token": token }
+        });
+        if (res.status === 401) return kickToAuth();
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        const countEl = document.getElementById("player-count");
+        const listEl = document.getElementById("player-list");
+
+        if (countEl) countEl.textContent = `${data.online} / ${data.max}`;
+
+        if (listEl) {
+            listEl.innerHTML = '';
+            if (data.names && data.names.length > 0) {
+                data.names.forEach(name => {
+                    const item = document.createElement('div');
+                    item.className = 'player-item';
+
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'player-name';
+                    nameSpan.textContent = name;
+                    item.appendChild(nameSpan);
+
+                    if (currentRole === 'admin') {
+                        const actions = document.createElement('div');
+                        actions.className = 'player-actions';
+
+                        const kickBtn = document.createElement('button');
+                        kickBtn.className = 'player-action-btn kick-btn';
+                        kickBtn.textContent = 'Kick';
+                        kickBtn.onclick = () => playerAction('kick', name);
+
+                        const banBtn = document.createElement('button');
+                        banBtn.className = 'player-action-btn ban-btn';
+                        banBtn.textContent = 'Ban';
+                        banBtn.onclick = () => playerAction('ban', name);
+
+                        actions.appendChild(kickBtn);
+                        actions.appendChild(banBtn);
+                        item.appendChild(actions);
+                    }
+
+                    listEl.appendChild(item);
+                });
+            } else {
+                listEl.innerHTML = '<div class="no-players">Нет игроков онлайн</div>';
+            }
+        }
+    } catch (e) {
+        console.error("[PLAYERS]", e);
+    }
+}
+
+async function playerAction(action, player) {
+    const token = localStorage.getItem("api_token");
+    if (!token) return;
+
+    const label = action === 'kick' ? 'кика' : 'бана';
+    const reason = prompt(`Причина ${label} для ${player}:`, '');
+    if (reason === null) return;
+
+    try {
+        const res = await fetch(`/api/${action}`, {
+            method: 'POST',
+            headers: {
+                "Content-Type": "application/json",
+                "X-API-Token": token
+            },
+            body: JSON.stringify({ player, reason: reason || undefined })
+        });
+
+        if (res.status === 401) return kickToAuth();
+        if (res.status === 403) { alert("Недостаточно прав"); return; }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        alert(data.result || `${action} выполнен`);
+        updatePlayers();
+    } catch (e) {
+        alert(`Ошибка: ${e.message}`);
+    }
+}
+
+// ── Статусный цикл ─────────────────────────────────────────────
 
 function startStatusLoop() {
     updateStatus();
     updateLogs();
+    updatePlayers();
 
-    // Статус — каждые 2 сек, логи — каждые 5 сек
     statusInterval = setInterval(updateStatus, 2000);
     logInterval = setInterval(updateLogs, 5000);
+    playerInterval = setInterval(updatePlayers, 10000);
 }
 
 function kickToAuth() {
@@ -141,11 +262,14 @@ function kickToAuth() {
     }
 }
 
+// ── Скачивание модпака (admin only) ────────────────────────────
+
 function downloadModpack() {
+    if (currentRole !== 'admin') return;
+
     const token = localStorage.getItem("api_token");
     if (!token) return;
 
-    // Скачивание через fetch + Blob (токен не попадает в URL)
     document.getElementById("status").innerText = "Скачиваю модпак...";
 
     fetch("/api/download-modpack", {
@@ -153,6 +277,7 @@ function downloadModpack() {
     })
     .then(res => {
         if (res.status === 401) { kickToAuth(); return; }
+        if (res.status === 403) { alert("Недостаточно прав"); return; }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const disposition = res.headers.get("Content-Disposition") || "";
@@ -179,14 +304,16 @@ function downloadModpack() {
     });
 }
 
+// ── Отправка команды (admin only) ──────────────────────────────
+
 async function sendCommand() {
+    if (currentRole !== 'admin') return;
     if (isCommandProcessing) return;
 
     const token = localStorage.getItem("api_token");
     const cmdInput = document.getElementById("command");
     const cmd = cmdInput.value.trim();
 
-    // Проверяем по machine-readable статусу
     if (currentStatusCode !== "running") {
         alert("Ошибка отправки команды! Сервер не запущен.");
         cmdInput.value = "";
@@ -214,6 +341,7 @@ async function sendCommand() {
             });
 
             if (res.status === 401) kickToAuth();
+            if (res.status === 403) { alert("Недостаточно прав"); return; }
             if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
 
             const data = await res.json();
@@ -232,6 +360,8 @@ async function sendCommand() {
     }
 }
 
+// ── Обновление статуса ─────────────────────────────────────────
+
 async function updateStatus() {
     const token = localStorage.getItem("api_token");
     if (!token) return;
@@ -246,15 +376,19 @@ async function updateStatus() {
 
         const data = await res.json();
 
-        // Сохраняем machine-readable статус для логики
         currentStatusCode = data.status_code || "unknown";
+
+        // Обновляем роль и видимость
+        if (data.role && data.role !== currentRole) {
+            currentRole = data.role;
+            applyRoleVisibility();
+        }
 
         document.getElementById("status").innerText = "Статус: " + (data.status || "Неизвестно");
         document.getElementById("server-ip").innerText = data.ip || "—";
         document.getElementById("server-port").innerText = data.port || "—";
         document.getElementById("server-version").innerText = data.version || "—";
 
-        // Обновляем строку подключения
         const connectEl = document.getElementById("connect-address");
         if (connectEl && data.ip && data.port) {
             connectEl.innerText = data.ip + ":" + data.port;
@@ -267,6 +401,8 @@ async function updateStatus() {
     }
 }
 
+// ── Отправка POST-действия ─────────────────────────────────────
+
 async function send(path) {
     const token = localStorage.getItem("api_token");
     if (!token) return alert("Введите API Token");
@@ -278,6 +414,10 @@ async function send(path) {
         });
 
         if (res.status === 401) return kickToAuth();
+        if (res.status === 403) {
+            alert("Недостаточно прав для выполнения действия");
+            return;
+        }
         if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
 
         const data = await res.json();

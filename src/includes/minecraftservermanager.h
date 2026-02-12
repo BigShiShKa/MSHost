@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <vector>
 #include "json.hpp"
+#include "rcon_client.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -60,6 +61,15 @@ public:
     ServerStatus get_status()  const;  // Текущий статус
 
     void send_command(const std::string& command);  // Передать консольную команду
+
+    // RCON
+    struct PlayerList {
+        int online = 0;
+        int max    = 0;
+        std::vector<std::string> names;
+    };
+    PlayerList  get_players();
+    std::string rcon_command(const std::string& cmd);
 
 private:
     /* Конфиги */
@@ -113,4 +123,21 @@ private:
     /* Потоки */
     std::thread output_thread_;
     std::thread process_monitor_thread_;
+
+    /* RCON */
+    struct RCONConfig {
+        bool enabled = false;
+        std::string host = "127.0.0.1";
+        int port = 25575;
+        std::string password;
+        int retry_interval_ms = 3000;
+        int max_retries = 12;
+    } rcon_config_;
+
+    RCONClient rcon_;
+    std::mutex rcon_mutex_;
+    std::atomic<bool> rcon_connected_{false};
+
+    void connect_rcon();
+    void disconnect_rcon();
 };

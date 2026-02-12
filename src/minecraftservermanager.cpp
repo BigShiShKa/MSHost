@@ -101,6 +101,20 @@ void MinecraftServerManager::load_config(json data) {
         oss << quote(config_.forge_args) << " nogui";
         config_.full_command = oss.str();
 
+        // RCON конфигурация
+        if (data["server"].contains("rcon")) {
+            const auto& rcon = data["server"]["rcon"];
+            rcon_config_.enabled          = rcon.value("enabled", false);
+            rcon_config_.host             = rcon.value("host", "127.0.0.1");
+            rcon_config_.port             = rcon.value("port", 25575);
+            rcon_config_.password         = rcon.value("password", "");
+            rcon_config_.retry_interval_ms = rcon.value("retry_interval", 3000);
+            rcon_config_.max_retries      = rcon.value("max_retries", 12);
+            if (rcon_config_.enabled) {
+                LOG_INFO("RCON включён: " + rcon_config_.host + ":" + std::to_string(rcon_config_.port), "CONFIG");
+            }
+        }
+
         LOG_INFO("Конфигурация успешно загружена: " + config_.full_command, "CONFIG");
         LOG_INFO("Таймаут остановки: " + std::to_string(config_.stop_timeout_ms) +
                  " мс, принудительное завершение: " + std::to_string(config_.force_kill_timeout_ms) + " мс", "CONFIG");
@@ -229,6 +243,8 @@ void MinecraftServerManager::start() {
 void MinecraftServerManager::stop() {
     if (!running_) return;
 
+    disconnect_rcon();
+
     status_ = ServerStatus::Stopping;
     LOG_INFO("Отправка 'stop' в stdin...", "MC");
 
@@ -336,6 +352,11 @@ void MinecraftServerManager::read_output() {
                         status_ = ServerStatus::Running;
                         ready_ = true;
                         LOG_INFO("Сервер готов к работе!", "MC");
+
+                        // Подключаем RCON в фоне
+                        if (rcon_config_.enabled) {
+                            std::thread([this]() { connect_rcon(); }).detach();
+                        }
                     } else if (line.find("Stopping server") != std::string::npos) {
                         status_ = ServerStatus::Stopping;
                         LOG_INFO("Обнаружена остановка сервера...", "MC");
@@ -362,6 +383,8 @@ void MinecraftServerManager::monitor_process_exit() {
         WaitForSingleObject(procInfo_.hProcess, INFINITE);
         LOG_WARNING("Процесс сервера завершился.", "MC");
 
+        disconnect_rcon();
+
         // Закрываем хендлы под мьютексом
         {
             std::lock_guard lg(handle_mutex_);
@@ -381,4 +404,91 @@ void MinecraftServerManager::monitor_process_exit() {
     } catch (...) {
         LOG_ERR("[monitor] Unknown exception.", "MC_IO");
     }
+}
+
+/* ------------------------------------------------------------------ */
+/*                               RCON                                  */
+/* ------------------------------------------------------------------ */
+void MinecraftServerManager::connect_rcon() {
+    if (!rcon_config_.enabled) return;
+
+    std::lock_guard lg(rcon_mutex_);
+
+    for (int attempt = 0; attempt < rcon_config_.max_retries; ++attempt) {
+        if (!running_) return;  // сервер уже выключается
+
+        if (rcon_.connect(rcon_config_.host, rcon_config_.port, rcon_config_.password)) {
+            rcon_connected_ = true;
+            LOG_INFO("RCON подключение установлено", "RCON");
+            return;
+        }
+        LOG_WARNING("RCON попытка " + std::to_string(attempt + 1) + "/" +
+                    std::to_string(rcon_config_.max_retries) + " не удалась", "RCON");
+        std::this_thread::sleep_for(std::chrono::milliseconds(rcon_config_.retry_interval_ms));
+    }
+    LOG_ERR("Не удалось подключиться к RCON после " +
+            std::to_string(rcon_config_.max_retries) + " попыток", "RCON");
+}
+
+void MinecraftServerManager::disconnect_rcon() {
+    std::lock_guard lg(rcon_mutex_);
+    if (rcon_connected_) {
+        rcon_.disconnect();
+        rcon_connected_ = false;
+        LOG_INFO("RCON отключен", "RCON");
+    }
+}
+
+MinecraftServerManager::PlayerList MinecraftServerManager::get_players() {
+    PlayerList result;
+    if (!rcon_connected_ || !running_) return result;
+
+    std::lock_guard lg(rcon_mutex_);
+    std::string response = rcon_.send_command("list");
+
+    if (response.empty()) return result;
+
+    // Формат: "There are X of a max of Y players online: p1, p2, p3"
+    auto are_pos = response.find("There are ");
+    if (are_pos == std::string::npos) return result;
+
+    auto num_start = are_pos + 10;
+    auto of_pos = response.find(" of a max of ", num_start);
+    if (of_pos == std::string::npos) return result;
+
+    try {
+        result.online = std::stoi(response.substr(num_start, of_pos - num_start));
+    } catch (...) { return result; }
+
+    auto max_start = of_pos + 13;
+    auto players_pos = response.find(" players online", max_start);
+    if (players_pos == std::string::npos) return result;
+
+    try {
+        result.max = std::stoi(response.substr(max_start, players_pos - max_start));
+    } catch (...) { return result; }
+
+    // Парсим имена после ": "
+    auto colon_pos = response.find(": ", players_pos);
+    if (colon_pos != std::string::npos) {
+        std::string names_str = response.substr(colon_pos + 2);
+        std::istringstream ss(names_str);
+        std::string name;
+        while (std::getline(ss, name, ',')) {
+            name.erase(0, name.find_first_not_of(" \t"));
+            name.erase(name.find_last_not_of(" \t") + 1);
+            if (!name.empty()) {
+                result.names.push_back(name);
+            }
+        }
+    }
+
+    return result;
+}
+
+std::string MinecraftServerManager::rcon_command(const std::string& cmd) {
+    if (!rcon_connected_ || !running_) return "";
+
+    std::lock_guard lg(rcon_mutex_);
+    return rcon_.send_command(cmd);
 }

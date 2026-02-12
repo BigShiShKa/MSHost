@@ -362,3 +362,104 @@ h1 {
     font-size: 13px;
   }
 }
+
+/* ── Панель игроков ─────────────────────────────── */
+.players-panel {
+  width: 100%;
+  background: rgba(30, 30, 40, 0.7);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(4px);
+          backdrop-filter: blur(4px);
+  box-sizing: border-box;
+}
+
+.panel-header {
+  color: #a0e0ff;
+  margin: 0 0 12px 0;
+  font-size: clamp(14px, 2vw, 16px);
+  font-weight: 500;
+}
+
+#player-count {
+  color: #e0e0e0;
+}
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.player-list::-webkit-scrollbar {
+  width: 6px;
+}
+.player-list::-webkit-scrollbar-track {
+  background: rgba(30, 30, 40, 0.5);
+  border-radius: 3px;
+}
+.player-list::-webkit-scrollbar-thumb {
+  background: rgba(80, 80, 100, 0.7);
+  border-radius: 3px;
+}
+
+.player-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(40, 40, 50, 0.7);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s ease;
+}
+
+.player-item:hover {
+  background: rgba(50, 50, 60, 0.8);
+}
+
+.player-name {
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.player-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.player-action-btn {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s ease;
+}
+
+.kick-btn {
+  background: rgba(200, 150, 30, 0.8);
+  color: white;
+}
+.kick-btn:hover {
+  background: rgba(230, 180, 50, 0.9);
+}
+
+.ban-btn {
+  background: rgba(180, 40, 40, 0.8);
+  color: white;
+}
+.ban-btn:hover {
+  background: rgba(210, 60, 60, 0.9);
+}
+
+.no-players {
+  color: #888;
+  font-style: italic;
+  padding: 8px;
+  text-align: center;
+}

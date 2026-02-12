@@ -5,7 +5,6 @@
 #include "json.hpp"
 #include <iostream>
 #include <atomic>
-#include <unordered_set>
 #include <unordered_map>
 #include <chrono>
 
@@ -49,7 +48,7 @@ private:
 
     nlohmann::json get_status_json();
 
-    std::unordered_set<std::string> tokens_;
+    std::unordered_map<std::string, std::string> tokens_;  // token → role ("admin"/"user")
     std::mutex tokens_mx_;
 
     // Rate limiter
@@ -57,7 +56,7 @@ private:
     std::mutex rate_mx_;
     void cleanup_rate_map();
 
-    bool check_token(const std::string&);
+    std::string check_token(const std::string&);  // returns role or "" if invalid
 
     void setup_routes();
 };
