@@ -10,12 +10,16 @@
 
 #include <atomic>
 #include <string>
-#include <ostream>  
+#include <mutex>
+#include <ostream>
 #include <thread>
 #include <fstream>
 #include <sstream>
+#include <filesystem>
+#include <vector>
 #include "json.hpp"
-//#include "rcon_client.h"
+
+namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 /* ===== Перечисление статусов ===== */
@@ -61,48 +65,31 @@ private:
     /* Конфиги */
     struct Config {
         std::string java_path;
-        std::vector<std::string> jvm_args_vec;  // Исходные аргументы
-        std::string jvm_args;           // Преобразованная строка аргументов
+        std::vector<std::string> jvm_args_vec;
         std::string server_dir;
         std::string forge_args;
         std::string user_jvm_args;
         std::string full_command;
 
-        /* RCON конфигурация
-        struct RCONConfig {
-            bool enabled = false;
-            std::string host = "127.0.0.1";
-            int port = 25575;
-            std::string password;
-            int retry_interval = 5000; // ms
-            int max_retries = 12;      // ~1 minute total
-        } rcon;*/
+        DWORD stop_timeout_ms      = 20000;
+        DWORD force_kill_timeout_ms = 5000;
 
         bool is_valid() const {
-            // Проверяем, что основные пути существуют и не пусты
             if (java_path.empty() || server_dir.empty()) {
                 return false;
             }
-            
-            // Проверяем существование файлов/директорий
             try {
-                if (!std::filesystem::exists(java_path) || !std::filesystem::exists(server_dir)) {
+                if (!fs::exists(java_path) || !fs::exists(server_dir)) {
                     return false;
                 }
-            } catch (const std::filesystem::filesystem_error&) {
+            } catch (const fs::filesystem_error&) {
                 return false;
             }
-            
             return true;
         }
     } config_;
 
     void load_config(json config_data);
-
-    /* RCON методы
-    void setup_rcon();
-    void rcon_connection_worker();
-    void check_server_ready_via_rcon();*/
 
     /* Внутренние потоки */
     void read_output();            // Чтение stdout сервера
@@ -115,19 +102,15 @@ private:
     std::atomic<bool>      running_{false};
     std::atomic<bool>      ready_{false};
     std::atomic<ServerStatus> status_{ServerStatus::Stopped};
-    std::atomic<bool>      rcon_enabled_{false};
-    std::atomic<bool>      rcon_connecting_{false};
 
     /* IPC-хендлы */
     HANDLE stdinPipe_ {nullptr};
     HANDLE readPipe_  {nullptr};
     PROCESS_INFORMATION procInfo_{};
+    std::mutex pipe_mutex_;           // Защита записи в stdinPipe_
+    std::mutex handle_mutex_;         // Защита закрытия хендлов
 
     /* Потоки */
     std::thread output_thread_;
     std::thread process_monitor_thread_;
-    std::thread rcon_thread_;
-
-    /* RCON 
-    RCONClient rcon_;*/
 };

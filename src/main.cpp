@@ -1,8 +1,3 @@
-/*
-Компиляция:
-g++ ./src/main.cpp ./src/MinecraftServerManager.cpp ./src/httpServer.cpp -o ./bin/mshost -lws2_32
-*/
-
 #include <thread>
 #include <atomic>
 #include <string>
@@ -17,7 +12,6 @@ g++ ./src/main.cpp ./src/MinecraftServerManager.cpp ./src/httpServer.cpp -o ./bi
 #include <windows.h>
 #include <fcntl.h>
 #include <io.h>
-#include <codecvt>
 #include <locale>
 #else
 #include <signal.h>
@@ -29,20 +23,36 @@ g++ ./src/main.cpp ./src/MinecraftServerManager.cpp ./src/httpServer.cpp -o ./bi
 #include "./includes/httpServer.h"
 #include "./includes/logger.h"
 
-using json = nlohmann::json;    
+using json = nlohmann::json;
 
 // ────────────────────────── Глобальные ──────────────────────────
 std::atomic<bool> running(true);
-const std::string Version = "0.4.0.134a";
+const std::string Version = "0.5.0";
 
-static MinecraftServerManager* g_mc   = nullptr; // для сигнал‑хендлеров
+static MinecraftServerManager* g_mc   = nullptr;
 static HttpServer*          g_http = nullptr;
-static std::thread          g_webThread;   // поток веб‑сервера
+static std::thread          g_webThread;
 static std::atomic<bool>    webRunning{false};
+
+// ────────────────────────── Help text ───────────────────────────
+static const wchar_t* HELP_TEXT =
+    L"\nСписок доступных команд:\n"
+    L"  server-start     : Запускает Minecraft Server\n"
+    L"  server-stop      : Останавливает Minecraft Server\n"
+    L"  server-restart   : Перезапускает Minecraft Server\n"
+    L"  server-status    : Выводит статус сервера\n"
+    L"  web-start        : Запускает Web Server\n"
+    L"  web-stop         : Останавливает Web Server\n"
+    L"  web-restart      : Перезапускает Web Server\n"
+    L"  web-updatetokens : Перечитывает файл токенов\n"
+    L"  exit             : Останавливает ВСЕ и завершает программу\n"
+    L"  help             : Выводит список команд\n"
+    L"  prank <игрок>    : Наносит психоурон игроку)))\n"
+    L"  /команда         : Отправляет в консоль Minecraft Server\n";
 
 // ────────────────────────── shutdown() ──────────────────────────
 void request_shutdown(const char* why) {
-    if (!running.exchange(false)) return; // уже в процессе
+    if (!running.exchange(false)) return;
     LOG_INFO(std::string("Получен сигнал завершения ( ") + why + " )", "SHUTDOWN");
 
     if (webRunning) {
@@ -50,38 +60,70 @@ void request_shutdown(const char* why) {
         if (g_webThread.joinable()) g_webThread.join();
         webRunning = false;
     }
-    if (g_mc)   g_mc->stop();
+    if (g_mc) g_mc->stop();
     Logger::instance().finalize();
 
 #ifdef _WIN32
-    // Разблокируем ReadConsole у input‑потока
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
     CancelIoEx(hIn, nullptr);
     CloseHandle(hIn);
 #endif
 }
 
-// ────────────────────────── Ctrl‑C / SIGINT ─────────────────────
+// ────────────────────────── Ctrl-C / SIGINT ─────────────────────
 #ifdef _WIN32
 BOOL WINAPI ConsoleHandler(DWORD sig)
 {
     if (sig == CTRL_C_EVENT || sig == CTRL_BREAK_EVENT) {
         request_shutdown("Win console");
-        return TRUE;          // мы всё обработали, жить продолжаем
+        return TRUE;
     }
-
     if (sig == CTRL_CLOSE_EVENT) {
         request_shutdown("Console close X");
-
-        // принудительно завершаем поток main, чтобы успеть
-        // дойти до atexit / flush‑ов, но до того, как ОС убьёт нас
-        Logger::instance().finalize(); // на всякий случай «ручной» вызов
-        ExitProcess(0);                // корректный выход
-        return TRUE;                   // не дойдём, но чтобы компилятор молчал
+        Logger::instance().finalize();
+        ExitProcess(0);
+        return TRUE;
     }
     return FALSE;
 }
 #endif
+
+// ────────────────── Конвертация wstring → string (Win32 API) ────
+#ifdef _WIN32
+static std::string wide_to_utf8(const std::wstring& wstr) {
+    if (wstr.empty()) return {};
+    int sz = WideCharToMultiByte(CP_UTF8, 0, wstr.data(),
+                                  static_cast<int>(wstr.size()),
+                                  nullptr, 0, nullptr, nullptr);
+    std::string result(sz, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wstr.data(),
+                        static_cast<int>(wstr.size()),
+                        result.data(), sz, nullptr, nullptr);
+    return result;
+}
+#endif
+
+// ────────────── Вспомогательные: start/stop web ─────────────────
+static void start_web(HttpServer& http) {
+    if (webRunning) {
+        LOG_WARNING("HTTP уже работает", "INPUT");
+        return;
+    }
+    webRunning = true;
+    g_webThread = std::thread(&HttpServer::run, &http);
+    LOG_INFO("HTTP сервер запущен", "INPUT");
+}
+
+static void stop_web(HttpServer& http) {
+    if (!webRunning) {
+        LOG_WARNING("HTTP не запущен", "INPUT");
+        return;
+    }
+    http.stop();
+    if (g_webThread.joinable()) g_webThread.join();
+    webRunning = false;
+    LOG_INFO("HTTP сервер остановлен", "INPUT");
+}
 
 // ────────────────────────── CLI Поток ───────────────────────────
 void handle_input(MinecraftServerManager& manager, HttpServer& http) {
@@ -90,94 +132,53 @@ void handle_input(MinecraftServerManager& manager, HttpServer& http) {
 #ifdef _WIN32
         std::wstring wcmd;
         if (!std::getline(std::wcin, wcmd)) { request_shutdown("stdin EOF"); break; }
-        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> cv; 
-        command = cv.to_bytes(wcmd);
+        command = wide_to_utf8(wcmd);
 #else
         if (!std::getline(std::cin, command)) { request_shutdown("stdin EOF"); break; }
 #endif
         if (command.empty()) continue;
 
-        // === команды ===
         if (command == "server-start") {
             LOG_INFO("Инициализация запуска сервера...", "INPUT");
             manager.start();
-        } 
+        }
         else if (command == "server-stop" || command == "stop") {
             LOG_INFO("Получена команда остановки сервера", "INPUT");
             manager.stop();
-        } 
+        }
         else if (command == "server-restart") {
             LOG_INFO("Получена команда перезапуска сервера...", "INPUT");
             manager.stop();
             manager.start();
-        } 
+        }
         else if (command == "web-start") {
-            if (!webRunning) {
-                webRunning = true;
-                g_webThread = std::thread(&HttpServer::run, &http);
-                LOG_INFO("HTTPS сервер запущен", "INPUT");
-            } else {
-                LOG_WARNING("HTTPS уже работает", "INPUT");
-            }
-
-        } 
+            start_web(http);
+        }
         else if (command == "web-stop") {
-            if (webRunning) {
-                http.stop();
-                if (g_webThread.joinable()) g_webThread.join();
-                webRunning = false;
-                LOG_INFO("HTTPS сервер остановлен", "INPUT");
-            } else {
-                LOG_WARNING("HTTPS не запущен", "INPUT");
-            } 
+            stop_web(http);
         }
         else if (command == "web-restart") {
-            LOG_INFO("HTTPS сервер перезапускается...", "INPUT");
-            if (webRunning) {
-                http.stop();
-                if (g_webThread.joinable()) g_webThread.join();
-                webRunning = false;
-                LOG_INFO("HTTPS сервер остановлен", "INPUT");
-            } else {
-                LOG_WARNING("HTTPS не запущен", "INPUT");
-            } 
-
-            if (!webRunning) {
-                webRunning = true;
-                g_webThread = std::thread(&HttpServer::run, &http);
-                LOG_INFO("HTTPS сервер запущен", "INPUT");
-            } else {
-                LOG_WARNING("HTTPS уже работает", "INPUT");
-            }
+            LOG_INFO("HTTP сервер перезапускается...", "INPUT");
+            stop_web(http);
+            start_web(http);
         }
         else if (command == "web-updatetokens") {
             http.load_tokens();
             LOG_INFO("Команда обновления токенов выполнена", "INPUT");
-        } 
+        }
         else if (command == "server-status") {
             LOG_INFO("Запрос статуса сервера", "INPUT");
             std::wcout << L"Статус сервера: " << manager.get_status() << std::endl;
-        } 
+        }
         else if (command == "exit") {
             LOG_INFO("Остановка программы и серверов...", "INPUT");
             request_shutdown("exit cmd");
             break;
-        } 
+        }
         else if (command == "help") {
-            std::wcout << L"\nСписок доступных команд:\n"
-                       << L"\"server-start/stop\" : Останавливает запущенный Minecraft Server\n"
-                       << L"\"server-restart\" : Перезапускает Minecraft Server\n"
-                       << L"\"server-status\" : Выводит статус сервера\n"
-                       << L"\"web-start\" : Запускает Web Server\n"
-                       << L"\"web-stop\" : Останавливает запущенный Web Server\n"
-                       << L"\"web-restart\" : Перезапускает Web Server\n"
-                       << L"\"web-updatetokens\" : перечитывает файл токенов\n"
-                       << L"\"exit\" : Останавливает ВСЕ и завершает программу\n"
-                       << L"\"help\" : Выводит список команд\n"
-                       << L"\"prank <игрок>\" : Наносит психоурон игроку)))\n"
-                       << L"\"/команда\" : Отправляет в консоль Minecraft Server\n" << std::endl;
-        } 
-        else if (command.rfind("prank",0) == 0 && command.size() > 5) {
+            std::wcout << HELP_TEXT << std::endl;
+        }
+        else if (command.rfind("prank", 0) == 0 && command.size() > 5) {
             if (manager.is_running()) {
                 std::string player = command.substr(5);
                 player.erase(0, player.find_first_not_of(" \t"));
@@ -189,23 +190,48 @@ void handle_input(MinecraftServerManager& manager, HttpServer& http) {
                 std::this_thread::sleep_for(std::chrono::seconds(9));
                 manager.send_command("execute at " + player + " run playsound midnightlurker:lurkerchase master " + player + " ~ ~ ~ 1 1 1");
                 manager.send_command("title " + player + " title [{\"text\":\"X\",\"obfuscated\":true,\"color\":\"red\",\"bold\":true},{\"text\":\" Run! \",\"color\":\"red\",\"bold\":true},{\"text\":\"Z\",\"obfuscated\":true,\"color\":\"red\",\"bold\":true}]");
-                LOG_INFO(">>> Пранк успешно нанес психо‑урон", "PRANK");
+                LOG_INFO(">>> Пранк успешно нанес психо-урон", "PRANK");
             } else {
                 LOG_WARNING("Сервер не запущен. Пранк отменён.", "PRANK");
             }
-
-        } else {
-            if (command[0] == '/') {
-                if (manager.is_running()) {
-                    manager.send_command(command.substr(1));
-                } else {
-                    LOG_WARNING("Команда к неработающему серверу", "INPUT");
-                }
+        }
+        else if (command[0] == '/') {
+            if (manager.is_running()) {
+                manager.send_command(command.substr(1));
             } else {
-                LOG_ERR("Неизвестная команда: " + command, "INPUT");
+                LOG_WARNING("Команда к неработающему серверу", "INPUT");
             }
         }
+        else {
+            LOG_ERR("Неизвестная команда: " + command, "INPUT");
+        }
     }
+}
+
+// ────────────────────────── Загрузка WebConfig из JSON ───────────
+static WebConfig load_web_config(const json& config) {
+    WebConfig wc;
+    const auto& web = config["web"];
+
+    wc.port            = web.value("port", 8080);
+    wc.tokens_file     = web.value("tokens_file", "tokens");
+    wc.logs_path       = web.value("logs_path", "server.log");
+    wc.modpack_path    = web.value("modpack_path", "");
+    wc.web_root        = web.value("web_root", "./site");
+    wc.upload_limit_mb = web.value("upload_limit", 7);
+    wc.max_log_lines   = web.value("max_log_lines", 500);
+    wc.rate_limit_ms   = web.value("rate_limit_ms", 1000);
+    wc.thread_pool_size = web.value("thread_pool_size", 4);
+
+    // Информация о MC-сервере для /api/status
+    if (config.contains("status")) {
+        const auto& st = config["status"];
+        wc.server_ip      = st.value("ip", "127.0.0.1");
+        wc.server_port    = st.value("port", 25565);
+        wc.server_version = st.value("version", "Unknown");
+    }
+
+    return wc;
 }
 
 // ────────────────────────── main() ─────────────────────────────
@@ -226,26 +252,22 @@ int main(int argc, char* argv[])
     }
 
 #ifdef _WIN32
-    // 1. Всегда включаем UTF‑8 в кодовую страницу — это не мешает.
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
     SetConsoleCtrlHandler(ConsoleHandler, TRUE);
 
-    // 2. Проверяем: stdout – это реальная консоль или pipe/pty?
     DWORD dummy;
     bool realConsole = GetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), &dummy);
 
     if (realConsole) {
-        // ── cmd / PowerShell / Windows Terminal (без VSCode) ──
         _setmode(_fileno(stdout),  _O_U16TEXT);
         _setmode(_fileno(stderr),  _O_U16TEXT);
         _setmode(_fileno(stdin),   _O_U16TEXT);
-        std::locale::global(std::locale(""));      // системная (UTF‑16)
+        std::locale::global(std::locale(""));
         std::wcout.imbue(std::locale());
         std::wcerr.imbue(std::locale());
         std::wcin .imbue(std::locale());
     } else {
-        // ── VSCode Terminal / MSYS2 / SSH‑pty / Git‑bash ──
         _setmode(_fileno(stdout),  _O_U8TEXT);
         _setmode(_fileno(stderr),  _O_U8TEXT);
         _setmode(_fileno(stdin),   _O_U8TEXT);
@@ -256,8 +278,8 @@ int main(int argc, char* argv[])
         std::wcin .imbue(utf8);
     }
 #else
-        std::signal(SIGINT,  PosixSigHandler);
-        std::signal(SIGTERM, PosixSigHandler);
+    std::signal(SIGINT,  PosixSigHandler);
+    std::signal(SIGTERM, PosixSigHandler);
 #endif
 
     try {
@@ -267,19 +289,14 @@ int main(int argc, char* argv[])
 
         LOG_INFO("Чтение конфигураций...", "MAIN");
         json config;
-        
+
         try {
-            std::ifstream config_file;
-            config_file.open("config.json");
-            
+            std::ifstream config_file("config.json");
             if (!config_file.is_open()) {
                 LOG_CRITICAL("Не удалось найти config.json!", "MAIN");
                 return 1;
             }
-            
             config = json::parse(config_file);
-            config_file.close();
-            
         } catch (const std::exception& e) {
             LOG_CRITICAL(std::string("Ошибка чтения config.json: ") + e.what(), "MAIN");
             return 1;
@@ -288,46 +305,26 @@ int main(int argc, char* argv[])
         LOG_INFO("Инициализация серверов...", "MAIN");
         MinecraftServerManager mcserver(config);
 
-        HttpServer http(
-            mcserver, 
-            config["web"]["port"].get<std::int16_t>(),
-            running,
-            config["web"]["tokens_file"].get<std::string>(),
-            config["web"]["logs_path"].get<std::string>(),
-            config["web"]["modpack_path"].get<std::string>(),
-            config["web"]["web_root"].get<std::string>(),
-            config["web"]["upload_limit"].get<std::int16_t>()
-        );
+        WebConfig webConfig = load_web_config(config);
+        HttpServer http(mcserver, running, webConfig);
 
         g_mc   = &mcserver;
         g_http = &http;
         LOG_INFO("Успешно!", "MAIN");
 
-        std::wcout << L"\nСписок доступных команд:\n"
-            << L"\"server-start/stop\" : Останавливает запущенный Minecraft Server\n"
-            << L"\"server-restart\" : Перезапускает Minecraft Server\n"
-            << L"\"server-status\" : Выводит статус сервера\n"
-            << L"\"web-start\" : Запускает Web Server\n"
-            << L"\"web-stop\" : Останавливает запущенный Web Server\n"
-            << L"\"web-restart\" : Перезапускает Web Server\n"
-            << L"\"web-updatetokens\" : перечитывает файл токенов\n"
-            << L"\"exit\" : Останавливает ВСЕ и завершает программу\n"
-            << L"\"help\" : Выводит список команд\n"
-            << L"\"prank <игрок>\" : Наносит психоурон игроку)))\n"
-            << L"\"/команда\" : Отправляет в консоль Minecraft Server\n"
-            << std::endl;
+        std::wcout << HELP_TEXT << std::endl;
 
         if (flagWeb && !webRunning) {
-            webRunning = true;
-            g_webThread = std::thread(&HttpServer::run, &http);
+            start_web(http);
             LOG_INFO("HTTP запущен по флагу", "MAIN");
         }
         if (flagMc) {
             mcserver.start();
         }
+
         LOG_INFO("Запуск потоков...", "MAIN");
         std::thread input_thread(handle_input, std::ref(mcserver), std::ref(http));
-        LOG_INFO("Успешно!", "MAIN");      
+        LOG_INFO("Успешно!", "MAIN");
 
         input_thread.join();
         if (g_webThread.joinable()) g_webThread.join();

@@ -2,15 +2,15 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>MSHost by BaDRiVeR</title>
+  <title>MSHost</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="stylesheet" href="/assets/css/index.css">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
   <div class="container">
-    <h1>Minecraft Server Control v0.4.0.132-RCON(alpha)</h1>
-    
+    <h1 id="page-title">Minecraft Server Control</h1>
+
     <div class="top-section">
       <div class="info-block">
         <div id="status">Статус: —</div>
@@ -20,35 +20,34 @@
           <div class="server-version">
             <strong>Version: </strong><span id="server-version">—</span>
           </div>
-          <div class="server-connect"> 
-            <strong>Connect: </strong><span id="server-ip">mshost.serveminecraft.net</span>:<span id="server-port">25566</span> 
+          <div class="server-connect">
+            <strong>Connect: </strong><span id="connect-address">—</span>
           </div>
         </div>
       </div>
-      
+
       <div class="control-buttons">
         <div class="buttons-row">
           <button class="control-btn" onclick="send('/api/start')">▶️ Запустить</button>
           <button class="control-btn" onclick="send('/api/stop')">⛔ Остановить</button>
-          <!--<button class="control-btn exit-btn" onclick="send('/api/exit')">❌ Отключить ядро</button>-->
         </div>
         <button class="download-button" onclick="downloadModpack()">⬇️ Скачать сборку модов</button>
       </div>
     </div>
-    
+
     <div class="log-container">
       <h3 class="log-header">Логи сервера:</h3>
       <div class="log-content-wrapper">
         <pre id="log-box"></pre>
       </div>
       <button class="scroll-down-btn" onclick="scrollLogsToBottom()">↓</button>
-      
+
       <div class="command-section">
         <input type="text" id="command" placeholder="Введите команду Minecraft">
       </div>
     </div>
   </div>
 
-  <script src="/assets/js/unobfs.js"></script>
+  <script src="/assets/js/index.js"></script>
 </body>
 </html>

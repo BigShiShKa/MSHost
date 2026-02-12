@@ -1,1 +1,288 @@
-const _0x5f27d2=_0x4836;(function(_0x2f0e05,_0x11c6a6){const _0x342ac0=_0x4836,_0x210e65=_0x2f0e05();while(!![]){try{const _0x461051=parseInt(_0x342ac0(0x178))/0x1*(parseInt(_0x342ac0(0x172))/0x2)+-parseInt(_0x342ac0(0x15a))/0x3*(parseInt(_0x342ac0(0x14d))/0x4)+-parseInt(_0x342ac0(0x147))/0x5*(-parseInt(_0x342ac0(0x15e))/0x6)+-parseInt(_0x342ac0(0x170))/0x7+parseInt(_0x342ac0(0x15f))/0x8*(-parseInt(_0x342ac0(0x158))/0x9)+-parseInt(_0x342ac0(0x177))/0xa+-parseInt(_0x342ac0(0x16f))/0xb*(-parseInt(_0x342ac0(0x166))/0xc);if(_0x461051===_0x11c6a6)break;else _0x210e65['push'](_0x210e65['shift']());}catch(_0x4502bf){_0x210e65['push'](_0x210e65['shift']());}}}(_0x1625,0x45d51));let statusInterval=null,alertShown=![];window[_0x5f27d2(0x14f)]('DOMContentLoaded',()=>{const _0x49ce0b=_0x5f27d2,_0x1d8bed=localStorage[_0x49ce0b(0x15c)](_0x49ce0b(0x16e));if(!_0x1d8bed){window[_0x49ce0b(0x17b)]['href']=_0x49ce0b(0x13b);return;}startStatusLoop();});function startStatusLoop(){updateStatus(),updateLogs(),statusInterval=setInterval(()=>{updateStatus(),updateLogs();},0x1388);}function _0x4836(_0x4c71c3,_0x110a58){const _0x1625fa=_0x1625();return _0x4836=function(_0x483620,_0x3b6b29){_0x483620=_0x483620-0x133;let _0x433b1d=_0x1625fa[_0x483620];return _0x433b1d;},_0x4836(_0x4c71c3,_0x110a58);}function kickToAuth(){const _0x1fb0af=_0x5f27d2;!alertShown&&(alertShown=!![],alert(_0x1fb0af(0x133)),localStorage['removeItem'](_0x1fb0af(0x16e)),window[_0x1fb0af(0x17b)][_0x1fb0af(0x148)]=_0x1fb0af(0x13b));}async function downloadModpack(){const _0x4805e2=_0x5f27d2,_0x42122a=localStorage[_0x4805e2(0x15c)](_0x4805e2(0x16e));if(!_0x42122a)return;try{const _0x4666f5=await fetch(_0x4805e2(0x13a),{'headers':{'X-API-Token':_0x42122a}});if(_0x4666f5[_0x4805e2(0x168)]===0x191)return kickToAuth();if(!_0x4666f5['ok'])throw new Error(_0x4805e2(0x152)+_0x4666f5[_0x4805e2(0x168)]);const _0x3b02bc=_0x4666f5[_0x4805e2(0x135)][_0x4805e2(0x140)](_0x4805e2(0x161)),_0x58396d=_0x3b02bc?_0x3b02bc['split'](_0x4805e2(0x17c))[0x1][_0x4805e2(0x167)](/"/g,''):_0x4805e2(0x15d),_0x516bd0=await _0x4666f5['blob'](),_0x28b34c=window[_0x4805e2(0x16a)]['createObjectURL'](_0x516bd0),_0x1855fd=document[_0x4805e2(0x138)]('a');_0x1855fd['href']=_0x28b34c,_0x1855fd[_0x4805e2(0x136)]=_0x58396d,document['body'][_0x4805e2(0x160)](_0x1855fd),_0x1855fd[_0x4805e2(0x16b)](),window['URL']['revokeObjectURL'](_0x28b34c),_0x1855fd['remove'](),document['getElementById'](_0x4805e2(0x168))['innerText']=_0x4805e2(0x169);}catch(_0xdc986f){document['getElementById'](_0x4805e2(0x168))[_0x4805e2(0x171)]=_0x4805e2(0x13d),console[_0x4805e2(0x174)](_0xdc986f);}}async function sendCommand(){const _0x3512b7=_0x5f27d2,_0xab4728=localStorage[_0x3512b7(0x15c)](_0x3512b7(0x16e)),_0x3727cf=document[_0x3512b7(0x14a)](_0x3512b7(0x150)),_0x36dfc7=_0x3727cf['value'][_0x3512b7(0x137)]();if(_0x36dfc7==_0x3512b7(0x13c))send(_0x3512b7(0x139));if(!_0x36dfc7)return alert(_0x3512b7(0x17a));try{const _0x362091=await fetch(_0x3512b7(0x14b),{'method':_0x3512b7(0x13f),'headers':{'Content-Type':_0x3512b7(0x175),'X-API-Token':_0xab4728},'body':JSON[_0x3512b7(0x165)]({'command':_0x36dfc7})});if(_0x362091['status']===0x191){!alertShown&&(alertShown=!![],alert('Неверный\x20API\x20Token!\x20Повторите\x20вход.'),localStorage[_0x3512b7(0x179)]('api_token'),window[_0x3512b7(0x17b)][_0x3512b7(0x148)]='auth.html');return;}if(!_0x362091['ok'])throw new Error(_0x3512b7(0x152)+_0x362091['status']);const _0x4501b3=await _0x362091[_0x3512b7(0x134)]();document['getElementById'](_0x3512b7(0x168))[_0x3512b7(0x171)]=_0x3512b7(0x164)+(_0x4501b3[_0x3512b7(0x168)]==_0x3512b7(0x156)?_0x3512b7(0x13e):_0x3512b7(0x149)),_0x3727cf[_0x3512b7(0x159)]='';}catch(_0x3d390f){document[_0x3512b7(0x14a)](_0x3512b7(0x168))['innerText']='Ошибка\x20при\x20отправке\x20команды';}}async function updateStatus(){const _0x527f9c=_0x5f27d2,_0x46da7c=localStorage[_0x527f9c(0x15c)]('api_token');if(!_0x46da7c)return;try{const _0x23bae9=await fetch(_0x527f9c(0x173),{'headers':{'X-API-Token':_0x46da7c}});if(_0x23bae9['status']===0x191)return kickToAuth();if(!_0x23bae9['ok'])throw new Error('Ошибка:\x20'+_0x23bae9['status']);const _0x264287=await _0x23bae9[_0x527f9c(0x134)]();document[_0x527f9c(0x14a)](_0x527f9c(0x168))[_0x527f9c(0x171)]=_0x527f9c(0x151)+(_0x264287[_0x527f9c(0x168)]||'Неизвестно'),document[_0x527f9c(0x14a)](_0x527f9c(0x176))[_0x527f9c(0x171)]=_0x264287['ip']||'—',document[_0x527f9c(0x14a)]('server-port')[_0x527f9c(0x171)]=_0x264287[_0x527f9c(0x145)]||'—';}catch(_0x3f392d){document['getElementById'](_0x527f9c(0x168))[_0x527f9c(0x171)]='Ошибка\x20при\x20получении\x20статуса',document['getElementById'](_0x527f9c(0x176))[_0x527f9c(0x171)]='—',document['getElementById'](_0x527f9c(0x163))['innerText']='—';}}async function send(_0x5e4ac3){const _0x38c773=_0x5f27d2,_0x390384=localStorage[_0x38c773(0x15c)]('api_token');if(!_0x390384)return alert(_0x38c773(0x153));try{const _0x1f5ee8=await fetch(_0x5e4ac3,{'method':_0x38c773(0x13f),'headers':{'X-API-Token':_0x390384}});if(_0x1f5ee8[_0x38c773(0x168)]===0x191)return kickToAuth();if(!_0x1f5ee8['ok'])throw new Error(_0x38c773(0x152)+_0x1f5ee8[_0x38c773(0x168)]);const _0x3d6cf6=await _0x1f5ee8[_0x38c773(0x134)]();if(_0x5e4ac3==='/api/exit'){document['getElementById']('status')[_0x38c773(0x171)]=_0x3d6cf6['message']||_0x38c773(0x142),clearInterval(statusInterval),setTimeout(()=>{const _0x48266e=_0x38c773;document[_0x48266e(0x144)][_0x48266e(0x162)]='\x0a\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<h1>🛑\x20Сервер\x20отключён</h1>\x0a\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20<p>Вы\x20можете\x20закрыть\x20это\x20окно.</p>\x0a\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20';},0x3e8);return;}document[_0x38c773(0x14a)](_0x38c773(0x168))[_0x38c773(0x171)]=_0x38c773(0x151)+(_0x3d6cf6[_0x38c773(0x168)]||'Нет\x20сообщения');}catch(_0x428786){document['getElementById'](_0x38c773(0x168))[_0x38c773(0x171)]=_0x38c773(0x15b);}}function _0x1625(){const _0x309a3b=['Сборка\x20модов\x20скачивается...','URL','click','join','[LOG]','api_token','601689cxrlUS','1654793MGcNKn','innerText','68HAkykA','/api/status','error','application/json','server-ip','364820ukQled','6305CiODVz','removeItem','Введите\x20команду','location','filename=','Неверный\x20API\x20Token!\x20Повторите\x20вход.','json','headers','download','trim','createElement','/api/stop','/api/download-modpack','auth.html','stop','Ошибка\x20при\x20скачивании\x20сборки','Выполнено!','POST','get','scrollHeight','Сервер\x20выключается...','Лог\x20пуст','body','port','logs','134035JIBuyn','href','Сервер\x20отключен!','getElementById','/api/command','/api/logs','96388cfJuAw','textContent','addEventListener','command','Статус:\x20','Ошибка:\x20','Введите\x20API\x20Token','isArray','HTTP\x20','Запущен','log-box','177471wBPEtG','value','51RlGIrR','Ошибка\x20при\x20выполнении\x20команды','getItem','modpack.zip','114SYarxV','56xQgUlB','appendChild','Content-Disposition','innerHTML','server-port','Ответ:\x20','stringify','84nOTuAy','replace','status'];_0x1625=function(){return _0x309a3b;};return _0x1625();}async function updateLogs(){const _0xc5af10=_0x5f27d2,_0x412ec4=localStorage[_0xc5af10(0x15c)]('api_token');if(!_0x412ec4)return;try{const _0x48774c=await fetch(_0xc5af10(0x14c),{'headers':{'X-API-Token':_0x412ec4}});if(_0x48774c[_0xc5af10(0x168)]===0x191)return kickToAuth();if(!_0x48774c['ok'])throw new Error(_0xc5af10(0x155)+_0x48774c[_0xc5af10(0x168)]);const _0x4d6356=await _0x48774c[_0xc5af10(0x134)](),_0x5646ff=document[_0xc5af10(0x14a)](_0xc5af10(0x157)),_0x58ab5a=Array[_0xc5af10(0x154)](_0x4d6356[_0xc5af10(0x146)])?_0x4d6356[_0xc5af10(0x146)][_0xc5af10(0x16c)]('\x0a'):_0x4d6356[_0xc5af10(0x146)]||_0xc5af10(0x143);_0x5646ff[_0xc5af10(0x14e)]=_0x58ab5a,_0x5646ff['scrollTop']=_0x5646ff[_0xc5af10(0x141)];}catch(_0x30550a){console[_0xc5af10(0x174)](_0xc5af10(0x16d),_0x30550a),document[_0xc5af10(0x14a)](_0xc5af10(0x157))[_0xc5af10(0x14e)]='Не\x20удалось\x20загрузить\x20логи';}}
+let statusInterval = null;
+let logInterval = null;
+let alertShown = false;
+let isCommandProcessing = false;
+const COMMAND_COOLDOWN = 1000;
+let autoScrollEnabled = true;
+let isUserScrolling = false;
+let scrollTimeout = null;
+
+// Текущий статус сервера (machine-readable)
+let currentStatusCode = "unknown";
+
+window.addEventListener("DOMContentLoaded", async () => {
+    const token = localStorage.getItem("api_token");
+
+    if (!token) {
+        window.location.href = "auth.html";
+        return;
+    }
+
+    // Валидация токена при загрузке страницы
+    try {
+        const res = await fetch("/api/status", {
+            headers: { "X-API-Token": token }
+        });
+        if (res.status === 401) {
+            localStorage.removeItem("api_token");
+            window.location.href = "auth.html";
+            return;
+        }
+    } catch (e) {
+        // Сервер недоступен — показываем страницу, она сама покажет ошибки
+    }
+
+    const scrollBtn = document.querySelector('.scroll-down-btn');
+    scrollBtn.addEventListener('click', scrollLogsToBottom);
+
+    document.querySelector('.log-content-wrapper').addEventListener('scroll', handleLogScroll);
+    updateScrollButtonVisibility();
+    startStatusLoop();
+
+    document.getElementById('command').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendCommand();
+        }
+    });
+});
+
+function handleLogScroll() {
+    isUserScrolling = true;
+    updateScrollButtonVisibility();
+
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+        isUserScrolling = false;
+    }, 100);
+}
+
+function updateScrollButtonVisibility() {
+    const logWrapper = document.querySelector('.log-content-wrapper');
+    const scrollBtn = document.querySelector('.scroll-down-btn');
+
+    if (!logWrapper || !scrollBtn) return;
+
+    const isAtBottom = logWrapper.scrollHeight - logWrapper.scrollTop <= logWrapper.clientHeight + 10;
+    autoScrollEnabled = isAtBottom;
+
+    scrollBtn.style.opacity = isAtBottom ? '0' : '1';
+    scrollBtn.style.pointerEvents = isAtBottom ? 'none' : 'auto';
+}
+
+function scrollLogsToBottom() {
+    const logWrapper = document.querySelector('.log-content-wrapper');
+    if (!logWrapper) return;
+
+    logWrapper.scrollTop = logWrapper.scrollHeight;
+    autoScrollEnabled = true;
+    updateScrollButtonVisibility();
+}
+
+async function updateLogs() {
+    const token = localStorage.getItem("api_token");
+    if (!token) return;
+
+    try {
+        const res = await fetch("/api/logs", { headers: { "X-API-Token": token } });
+        if (res.status === 401) return kickToAuth();
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        const logBox = document.getElementById("log-box");
+        const logWrapper = document.querySelector('.log-content-wrapper');
+
+        if (!logBox || !logWrapper) return;
+
+        const previousScrollTop = logWrapper.scrollTop;
+        const previousScrollHeight = logWrapper.scrollHeight;
+        const wasScrolledToBottom = previousScrollHeight - previousScrollTop <= logWrapper.clientHeight + 10;
+
+        const text = Array.isArray(data.logs) ? data.logs.join("\n") : (data.logs || "Лог пуст");
+
+        if (logBox.textContent !== text) {
+            logBox.textContent = text;
+
+            if (!wasScrolledToBottom && !isUserScrolling) {
+                const newScrollHeight = logWrapper.scrollHeight;
+                const heightDifference = newScrollHeight - previousScrollHeight;
+                logWrapper.scrollTop = previousScrollTop + heightDifference;
+            } else if (wasScrolledToBottom || autoScrollEnabled) {
+                logWrapper.scrollTop = logWrapper.scrollHeight;
+            }
+        }
+
+        updateScrollButtonVisibility();
+
+    } catch (e) {
+        console.error("[LOG]", e);
+        const logBox = document.getElementById("log-box");
+        if (logBox) {
+            logBox.textContent = "Не удалось загрузить логи";
+        }
+    }
+}
+
+function startStatusLoop() {
+    updateStatus();
+    updateLogs();
+
+    // Статус — каждые 2 сек, логи — каждые 5 сек
+    statusInterval = setInterval(updateStatus, 2000);
+    logInterval = setInterval(updateLogs, 5000);
+}
+
+function kickToAuth() {
+    if (!alertShown) {
+        alertShown = true;
+        alert("Неверный API Token! Повторите вход.");
+        localStorage.removeItem("api_token");
+        window.location.href = "auth.html";
+    }
+}
+
+function downloadModpack() {
+    const token = localStorage.getItem("api_token");
+    if (!token) return;
+
+    // Скачивание через fetch + Blob (токен не попадает в URL)
+    document.getElementById("status").innerText = "Скачиваю модпак...";
+
+    fetch("/api/download-modpack", {
+        headers: { "X-API-Token": token }
+    })
+    .then(res => {
+        if (res.status === 401) { kickToAuth(); return; }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const disposition = res.headers.get("Content-Disposition") || "";
+        const match = disposition.match(/filename=(.+)/);
+        const filename = match ? match[1].replace(/"/g, '') : "modpack.zip";
+        return res.blob().then(blob => ({ blob, filename }));
+    })
+    .then(result => {
+        if (!result) return;
+        const { blob, filename } = result;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    })
+    .catch(e => {
+        console.error("[DOWNLOAD]", e);
+        document.getElementById("status").innerText = "Ошибка скачивания модпака";
+    });
+}
+
+async function sendCommand() {
+    if (isCommandProcessing) return;
+
+    const token = localStorage.getItem("api_token");
+    const cmdInput = document.getElementById("command");
+    const cmd = cmdInput.value.trim();
+
+    // Проверяем по machine-readable статусу
+    if (currentStatusCode !== "running") {
+        alert("Ошибка отправки команды! Сервер не запущен.");
+        cmdInput.value = "";
+        return;
+    }
+
+    if (!cmd) {
+        alert("Введите команду");
+        return;
+    }
+
+    isCommandProcessing = true;
+
+    try {
+        if (cmd === "stop") {
+            await send('/api/stop');
+        } else {
+            const res = await fetch('/api/command', {
+                method: 'POST',
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-API-Token": token
+                },
+                body: JSON.stringify({ command: cmd })
+            });
+
+            if (res.status === 401) kickToAuth();
+            if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+
+            const data = await res.json();
+            document.getElementById("status").innerText =
+                "Ответ: " + (data.status_code === "running" ? "Выполнено!" : "Сервер отключен!");
+        }
+
+        cmdInput.value = "";
+    } catch (e) {
+        document.getElementById("status").innerText = "Ошибка при отправке команды";
+        console.error(e);
+    } finally {
+        setTimeout(() => {
+            isCommandProcessing = false;
+        }, COMMAND_COOLDOWN);
+    }
+}
+
+async function updateStatus() {
+    const token = localStorage.getItem("api_token");
+    if (!token) return;
+
+    try {
+        const res = await fetch('/api/status', {
+            headers: { "X-API-Token": token }
+        });
+
+        if (res.status === 401) return kickToAuth();
+        if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+
+        const data = await res.json();
+
+        // Сохраняем machine-readable статус для логики
+        currentStatusCode = data.status_code || "unknown";
+
+        document.getElementById("status").innerText = "Статус: " + (data.status || "Неизвестно");
+        document.getElementById("server-ip").innerText = data.ip || "—";
+        document.getElementById("server-port").innerText = data.port || "—";
+        document.getElementById("server-version").innerText = data.version || "—";
+
+        // Обновляем строку подключения
+        const connectEl = document.getElementById("connect-address");
+        if (connectEl && data.ip && data.port) {
+            connectEl.innerText = data.ip + ":" + data.port;
+        }
+    } catch (e) {
+        document.getElementById("status").innerText = "Ошибка при получении статуса";
+        document.getElementById("server-ip").innerText = "—";
+        document.getElementById("server-port").innerText = "—";
+        document.getElementById("server-version").innerText = "—";
+    }
+}
+
+async function send(path) {
+    const token = localStorage.getItem("api_token");
+    if (!token) return alert("Введите API Token");
+
+    try {
+        const res = await fetch(path, {
+            method: 'POST',
+            headers: { "X-API-Token": token }
+        });
+
+        if (res.status === 401) return kickToAuth();
+        if (!res.ok) throw new Error(`Ошибка: ${res.status}`);
+
+        const data = await res.json();
+        document.getElementById("status").innerText = "Статус: " + (data.status || "Нет сообщения");
+    } catch (e) {
+        document.getElementById("status").innerText = "Ошибка при выполнении команды";
+    }
+}

@@ -9,6 +9,10 @@ MinecraftServerManager::MinecraftServerManager(const json& config_data) {
     try {
         ZeroMemory(&procInfo_, sizeof(procInfo_));
         load_config(config_data);
+
+        if (!config_.is_valid()) {
+            throw std::runtime_error("Конфигурация невалидна после загрузки");
+        }
     } catch (const std::exception& e) {
         LOG_CRITICAL(std::string("Ошибка инициализации: ") + e.what(), "MC_INIT");
         throw;
@@ -18,12 +22,12 @@ MinecraftServerManager::MinecraftServerManager(const json& config_data) {
 MinecraftServerManager::~MinecraftServerManager() {
     stop();
 
-    /*rcon_connecting_ = false;
-    if (rcon_thread_.joinable()) {
-        rcon_thread_.join();
-    }
-    rcon_.disconnect();*/
+    // Ждём завершения потоков перед закрытием хендлов
+    if (output_thread_.joinable())          output_thread_.join();
+    if (process_monitor_thread_.joinable()) process_monitor_thread_.join();
 
+    // Единственное место закрытия хендлов (в деструкторе, после join)
+    std::lock_guard lg(handle_mutex_);
     if (procInfo_.hProcess) {
         CloseHandle(procInfo_.hProcess);
         procInfo_.hProcess = nullptr;
@@ -42,13 +46,12 @@ MinecraftServerManager::~MinecraftServerManager() {
     }
 }
 
-std::string quote(const std::string& str) {
+static std::string quote(const std::string& str) {
     return "\"" + str + "\"";
 }
 
 void MinecraftServerManager::load_config(json data) {
     try {
-        // Проверка обязательных полей
         if (!data.contains("java") || !data["java"].contains("path")) {
             throw std::runtime_error("config.json: Не указан путь к Java");
         }
@@ -56,19 +59,31 @@ void MinecraftServerManager::load_config(json data) {
             throw std::runtime_error("config.json: Не указана директория сервера");
         }
 
-        // Загрузка параметров с проверкой
-        config_.java_path = data["java"]["path"].get<std::string>();
+        config_.java_path  = data["java"]["path"].get<std::string>();
         config_.server_dir = data["server"]["directory"].get<std::string>();
         config_.forge_args = data["server"]["forge_args"].get<std::string>();
 
-        // Обработка JVM аргументов
+        // JVM аргументы
         if (data["java"].contains("jvm_args") && data["java"]["jvm_args"].is_array()) {
             for (const auto& arg : data["java"]["jvm_args"]) {
                 config_.jvm_args_vec.push_back(arg.get<std::string>());
             }
         }
 
-        // Валидация конфигурации
+        // user_jvm_args
+        if (data["server"].contains("user_jvm_args")) {
+            config_.user_jvm_args = data["server"]["user_jvm_args"].get<std::string>();
+        }
+
+        // Таймауты из конфига
+        if (data["server"].contains("stop_timeout_ms")) {
+            config_.stop_timeout_ms = data["server"]["stop_timeout_ms"].get<DWORD>();
+        }
+        if (data["server"].contains("force_kill_timeout_ms")) {
+            config_.force_kill_timeout_ms = data["server"]["force_kill_timeout_ms"].get<DWORD>();
+        }
+
+        // Валидация путей
         if (!fs::exists(config_.java_path)) {
             throw std::runtime_error("config.json: Java не найдена по указанному пути");
         }
@@ -76,34 +91,19 @@ void MinecraftServerManager::load_config(json data) {
             throw std::runtime_error("config.json: Директория сервера не существует");
         }
 
-        /* Загрузка RCON конфигурации
-        if (data["server"].contains("rcon")) {
-            auto rcon_cfg = data["server"]["rcon"];
-            config_.rcon.enabled = rcon_cfg.value("enabled", false);
-            config_.rcon.host = rcon_cfg.value("host", "localhost");
-            config_.rcon.port = rcon_cfg.value("port", 25575);
-            config_.rcon.password = rcon_cfg.value("password", "");
-            config_.rcon.retry_interval = rcon_cfg.value("retry_interval", 5000);
-            config_.rcon.max_retries = rcon_cfg.value("max_retries", 12);
-            
-            if (config_.rcon.enabled) {
-                LOG_INFO("RCON включен: " + config_.rcon.host + ":" + 
-                        std::to_string(config_.rcon.port), "CONFIG");
-            }
-        }*/
-
         // Собираем команду запуска
         std::ostringstream oss;
         oss << quote(config_.java_path) << " ";
-
         for (const auto& arg : config_.jvm_args_vec)
             oss << arg << " ";
-
+        if (!config_.user_jvm_args.empty())
+            oss << quote(config_.user_jvm_args) << " ";
         oss << quote(config_.forge_args) << " nogui";
-
         config_.full_command = oss.str();
 
-        LOG_INFO("Конфигурация успешно загружена: "+ config_.full_command, "CONFIG");
+        LOG_INFO("Конфигурация успешно загружена: " + config_.full_command, "CONFIG");
+        LOG_INFO("Таймаут остановки: " + std::to_string(config_.stop_timeout_ms) +
+                 " мс, принудительное завершение: " + std::to_string(config_.force_kill_timeout_ms) + " мс", "CONFIG");
     } catch (const json::exception& e) {
         throw std::runtime_error("Ошибка JSON: " + std::string(e.what()));
     } catch (const std::exception& e) {
@@ -130,72 +130,6 @@ std::string MinecraftServerManager::get_last_error_message(DWORD err) {
     return msg;
 }
 
-/*
-void MinecraftServerManager::setup_rcon() {
-    if (!config_.rcon.enabled || config_.rcon.password.empty()) {
-        rcon_enabled_ = false;
-        return;
-    }
-    
-    rcon_enabled_ = true;
-    rcon_connecting_ = true;
-    
-    // Запускаем поток для подключения RCON
-    rcon_thread_ = std::thread(&MinecraftServerManager::rcon_connection_worker, this);
-}
-
-void MinecraftServerManager::rcon_connection_worker() {
-    if (!rcon_enabled_) return;
-    
-    LOG_INFO("Запуск RCON подключения к " + config_.rcon.host + ":" + 
-             std::to_string(config_.rcon.port), "RCON");
-    
-    // ВРЕМЕННАЯ ОТЛАДКА: выводим пароль (осторожно!)
-    std::string masked_password = std::string(config_.rcon.password.size(), '*');
-    LOG_DEBUG("Используемый пароль RCON: " + masked_password + " (длина: " + 
-             std::to_string(config_.rcon.password.length()) + ")", "RCON");
-    
-    int retries = 0;
-    while (rcon_connecting_ && retries < config_.rcon.max_retries) {
-        if (rcon_.connect(config_.rcon.host, config_.rcon.port, config_.rcon.password)) {
-            LOG_INFO("RCON успешно подключен", "RCON");
-            check_server_ready_via_rcon();
-            return;
-        }
-        
-        retries++;
-        LOG_WARNING("Попытка RCON подключения " + std::to_string(retries) + 
-                   "/" + std::to_string(config_.rcon.max_retries) + " failed", "RCON");
-        
-        // Ждем перед следующей попыткой
-        for (int i = 0; i < config_.rcon.retry_interval / 1000 && rcon_connecting_; i++) {
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-        }
-    }
-    
-    if (rcon_connecting_) {
-        LOG_ERR("Не удалось подключиться к RCON после всех попыток", "RCON");
-        rcon_enabled_ = false;
-    }
-}
-
-void MinecraftServerManager::check_server_ready_via_rcon() {
-    if (!rcon_.is_connected()) return;
-    
-    try {
-        auto response = rcon_.send_command("list");
-        if (!response.empty()) {
-            ready_ = true;
-            status_ = ServerStatus::Running;
-            LOG_INFO("Сервер полностью запущен (подтверждено через RCON)!", "MC");
-            LOG_INFO("Ответ сервера: " + response, "MC");
-        }
-    } catch (const std::exception& e) {
-        LOG_WARNING("Ошибка проверки готовности через RCON: " + std::string(e.what()), "MC");
-    }
-}
-*/
-
 /* ------------------------------------------------------------------ */
 /*                               START                                */
 /* ------------------------------------------------------------------ */
@@ -205,18 +139,17 @@ void MinecraftServerManager::start() {
         return;
     }
 
-    // safety‑net, если кто‑то вызвал start() без stop()
+    // Ждём завершения потоков от предыдущей сессии
     if (output_thread_.joinable())          output_thread_.join();
     if (process_monitor_thread_.joinable()) process_monitor_thread_.join();
 
     output_thread_          = std::thread();
     process_monitor_thread_ = std::thread();
 
-    /* Сбрасываем procInfo_ на случай повторного запуска */
     ZeroMemory(&procInfo_, sizeof(procInfo_));
 
     status_ = ServerStatus::Starting;
-    LOG_INFO("Запуск Minecraft‑сервера...", "MC");
+    LOG_INFO("Запуск Minecraft-сервера...", "MC");
 
     const std::string& cmd = config_.full_command;
     LOG_INFO("Конфиги запуска инициализированы!", "MC");
@@ -224,10 +157,9 @@ void MinecraftServerManager::start() {
     /* ---------- Настройка пайпов ---------- */
     SECURITY_ATTRIBUTES sa{ sizeof(sa), nullptr, TRUE };
 
-    HANDLE writePipeOut = nullptr;   // то, куда сервер пишет stdout
-    HANDLE readPipeIn   = nullptr;   // то, откуда сервер читает stdin
+    HANDLE writePipeOut = nullptr;
+    HANDLE readPipeIn   = nullptr;
 
-    /* stdout → наш readPipe_ */
     if (!CreatePipe(&readPipe_, &writePipeOut, &sa, 0)) {
         LOG_ERR("Не удалось создать pipe stdout.", "MC_PIPE");
         status_ = ServerStatus::Stopped;
@@ -235,7 +167,6 @@ void MinecraftServerManager::start() {
     }
     SetHandleInformation(readPipe_, HANDLE_FLAG_INHERIT, 0);
 
-    /* stdin  ← наш stdinPipe_  */
     if (!CreatePipe(&readPipeIn, &stdinPipe_, &sa, 0)) {
         LOG_ERR("Не удалось создать pipe stdin.", "MC_PIPE");
         status_ = ServerStatus::Stopped;
@@ -253,7 +184,6 @@ void MinecraftServerManager::start() {
     si.hStdError  = writePipeOut;
     si.dwFlags    = STARTF_USESTDHANDLES;
 
-    // Преобразуем рабочую директорию в C-строку
     std::vector<char> dirBuf(config_.server_dir.begin(), config_.server_dir.end());
     dirBuf.push_back('\0');
 
@@ -268,21 +198,19 @@ void MinecraftServerManager::start() {
         DWORD err = GetLastError();
         std::string errMsg = get_last_error_message(err);
         LOG_CRITICAL("Ошибка запуска (код " + std::to_string(err) + "): " + errMsg, "MC");
+        LOG_CRITICAL("Прочитанный конфиг: " + config_.full_command, "MC");
 
-        LOG_CRITICAL("Прочитанный конфиг: " + config_.full_command ,"MC");
-
-        status_ = ServerStatus::Stopped;
+        status_  = ServerStatus::Stopped;
         running_ = false;
-        ready_ = false;                   
+        ready_   = false;
 
         CloseHandle(readPipeIn);
-        CloseHandle(stdinPipe_);
-        CloseHandle(readPipe_);
+        CloseHandle(stdinPipe_);  stdinPipe_ = nullptr;
+        CloseHandle(readPipe_);   readPipe_  = nullptr;
         CloseHandle(writePipeOut);
         return;
     }
 
-    /* Эти хендлы процессу больше не нужны */
     CloseHandle(writePipeOut);
     CloseHandle(readPipeIn);
 
@@ -291,40 +219,45 @@ void MinecraftServerManager::start() {
 
     LOG_INFO("Процесс сервера запущен успешно", "MC");
 
-    //setup_rcon();
-
-    /* ---------- Запускаем рабочие потоки ---------- */
     output_thread_          = std::thread(&MinecraftServerManager::read_output,          this);
     process_monitor_thread_ = std::thread(&MinecraftServerManager::monitor_process_exit, this);
 }
 
-/* ------------------------------------------------------------------
-                                STOP                                */
-                                
+/* ------------------------------------------------------------------ */
+/*                                STOP                                */
+/* ------------------------------------------------------------------ */
 void MinecraftServerManager::stop() {
     if (!running_) return;
 
     status_ = ServerStatus::Stopping;
     LOG_INFO("Отправка 'stop' в stdin...", "MC");
 
-    const std::string stopCmd = "stop\n";
-    DWORD written;
-    WriteFile(stdinPipe_, stopCmd.c_str(),
-              static_cast<DWORD>(stopCmd.size()),
-              &written, nullptr);
-
-    /* Даём серверу шанс завершиться красиво */
-    if (WaitForSingleObject(procInfo_.hProcess, 40'000) == WAIT_TIMEOUT) {
-        LOG_WARNING("Сервер не вышел вовремя. Принудительное завершение...", "MC");
-        TerminateProcess(procInfo_.hProcess, 0);
-        WaitForSingleObject(procInfo_.hProcess, 5'000);
+    // Безопасная запись в пайп
+    {
+        std::lock_guard lg(pipe_mutex_);
+        std::lock_guard hg(handle_mutex_);
+        if (stdinPipe_) {
+            const std::string stopCmd = "stop\n";
+            DWORD written;
+            WriteFile(stdinPipe_, stopCmd.c_str(),
+                      static_cast<DWORD>(stopCmd.size()),
+                      &written, nullptr);
+        }
     }
 
-    /* Stream‑потоки завершаются сами, но join обязателен */
+    /* Даём серверу шанс завершиться красиво */
+    if (procInfo_.hProcess) {
+        if (WaitForSingleObject(procInfo_.hProcess, config_.stop_timeout_ms) == WAIT_TIMEOUT) {
+            LOG_WARNING("Сервер не вышел вовремя. Принудительное завершение...", "MC");
+            TerminateProcess(procInfo_.hProcess, 0);
+            WaitForSingleObject(procInfo_.hProcess, config_.force_kill_timeout_ms);
+        }
+    }
+
+    /* Ждём завершения потоков */
     if (output_thread_.joinable())          output_thread_.join();
     if (process_monitor_thread_.joinable()) process_monitor_thread_.join();
 
-    /* --- обнуляем --- */
     output_thread_          = std::thread();
     process_monitor_thread_ = std::thread();
 
@@ -348,16 +281,13 @@ void MinecraftServerManager::send_command(const std::string& cmd) {
         return;
     }
 
-    /*
-    if (rcon_enabled_ && rcon_.is_connected()) {
-        auto response = rcon_.send_command(cmd);
-        if (!response.empty()) {
-            LOG_DEBUG("Команда через RCON: " + cmd + " → " + response, "MC_RCON");
-            return;
-        } else {
-            LOG_WARNING("RCON команда не получила ответа, пробуем через консоль", "MC_RCON");
-        }
-    }*/
+    std::lock_guard lg(pipe_mutex_);
+    std::lock_guard hg(handle_mutex_);
+
+    if (!stdinPipe_) {
+        LOG_ERR("Пайп stdin уже закрыт.", "MC_IO");
+        return;
+    }
 
     const std::string cmdNL = cmd + '\n';
     DWORD written;
@@ -399,29 +329,22 @@ void MinecraftServerManager::read_output() {
                     std::string line = lineBuf.substr(0, pos);
                     lineBuf.erase(0, pos + 1);
 
-                    // НЕ Дублируем в консоль, чтобы админ видел live‑лог.
-                    //std::cout << "[MC] " << line << '\n';
-
-                    // Пишем ПОЛНЫЙ вывод сервера в файл/консоль через Logger
                     LOG_INFO(line, "MC_OUT");
 
-                    if (line.find("Dedicated server took") != std::string::npos && 
+                    if (line.find("Dedicated server took") != std::string::npos &&
                         line.find("seconds to load") != std::string::npos) {
-                        // Сервер запущен, но готовность подтвердим через RCON
-                         status_ = ServerStatus::Running;
-                         ready_ = true;
-                        LOG_INFO("Сервер сообщил о готовности, проверяем через RCON...", "MC");
+                        status_ = ServerStatus::Running;
+                        ready_ = true;
+                        LOG_INFO("Сервер готов к работе!", "MC");
                     } else if (line.find("Stopping server") != std::string::npos) {
                         status_ = ServerStatus::Stopping;
                         LOG_INFO("Обнаружена остановка сервера...", "MC");
                     } else if (line.find("All dimensions are saved") != std::string::npos) {
                         running_ = false;
-                        //rcon_connecting_ = false; // Останавливаем попытки RCON подключения
-                        //rcon_.disconnect();
                     }
                 }
             } else {
-                break;  // ReadFile вернул 0 — пайп закрыт
+                break;
             }
         }
     } catch (const std::exception& ex) {
@@ -437,13 +360,16 @@ void MinecraftServerManager::monitor_process_exit() {
         if (!procInfo_.hProcess) return;
 
         WaitForSingleObject(procInfo_.hProcess, INFINITE);
-        LOG_WARNING("Процесс сервера завершился извне.", "MC");
+        LOG_WARNING("Процесс сервера завершился.", "MC");
 
-        /* Закрываем хендлы — только тут, чтобы не было дублей */
-        if (procInfo_.hProcess) { CloseHandle(procInfo_.hProcess); procInfo_.hProcess = nullptr; }
-        if (procInfo_.hThread)  { CloseHandle(procInfo_.hThread);  procInfo_.hThread  = nullptr; }
-        if (stdinPipe_)         { CloseHandle(stdinPipe_);         stdinPipe_         = nullptr; }
-        if (readPipe_)          { CloseHandle(readPipe_);          readPipe_          = nullptr; }
+        // Закрываем хендлы под мьютексом
+        {
+            std::lock_guard lg(handle_mutex_);
+            if (procInfo_.hProcess) { CloseHandle(procInfo_.hProcess); procInfo_.hProcess = nullptr; }
+            if (procInfo_.hThread)  { CloseHandle(procInfo_.hThread);  procInfo_.hThread  = nullptr; }
+            if (stdinPipe_)         { CloseHandle(stdinPipe_);         stdinPipe_         = nullptr; }
+            if (readPipe_)          { CloseHandle(readPipe_);          readPipe_          = nullptr; }
+        }
 
         running_ = false;
         ready_   = false;
