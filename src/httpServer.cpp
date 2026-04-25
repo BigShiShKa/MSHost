@@ -238,6 +238,16 @@ void HttpServer::setup_routes() {
                 }
             }
 
+            // Fallback: авторизация через query-параметр ?auth=base64 (для прямого скачивания)
+            if (login.empty() && req.has_param("auth")) {
+                std::string decoded = base64_decode(req.get_param_value("auth"));
+                auto colon = decoded.find(':');
+                if (colon != std::string::npos) {
+                    login = decoded.substr(0, colon);
+                    password = decoded.substr(colon + 1);
+                }
+            }
+
             std::string role = check_auth(login, password);
             if (role.empty()) {
                 res.status = 401;
@@ -464,7 +474,7 @@ void HttpServer::setup_routes() {
         try {
             auto body = json::parse(req.body);
             std::string player = body["player"].get<std::string>();
-            std::string reason = body.value("reason", "Kicked by admin");
+            std::string reason = body.value("reason", "");
 
             if (player.empty() || player.size() > 16) {
                 res.status = 400;
@@ -472,7 +482,9 @@ void HttpServer::setup_routes() {
                 return;
             }
 
-            std::string result = manager_.rcon_command("kick " + player + " " + reason);
+            std::string cmd = "kick " + player;
+            if (!reason.empty()) cmd += " " + reason;
+            std::string result = manager_.rcon_command(cmd);
             LOG_INFO("Kick: " + player + " (reason: " + reason + ")", "WEB");
             res.set_content(json{{"result", result}}.dump(), "application/json");
         } catch (...) {
@@ -487,7 +499,7 @@ void HttpServer::setup_routes() {
         try {
             auto body = json::parse(req.body);
             std::string player = body["player"].get<std::string>();
-            std::string reason = body.value("reason", "Banned by admin");
+            std::string reason = body.value("reason", "");
 
             if (player.empty() || player.size() > 16) {
                 res.status = 400;
@@ -495,7 +507,9 @@ void HttpServer::setup_routes() {
                 return;
             }
 
-            std::string result = manager_.rcon_command("ban " + player + " " + reason);
+            std::string cmd = "ban " + player;
+            if (!reason.empty()) cmd += " " + reason;
+            std::string result = manager_.rcon_command(cmd);
             LOG_INFO("Ban: " + player + " (reason: " + reason + ")", "WEB");
             res.set_content(json{{"result", result}}.dump(), "application/json");
         } catch (...) {

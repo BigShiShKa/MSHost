@@ -358,7 +358,8 @@ void MinecraftServerManager::read_output() {
                     LOG_INFO(line, "MC_OUT");
 
                     if (line.find("Dedicated server took") != std::string::npos &&
-                        line.find("seconds to load") != std::string::npos) {
+                        line.find("seconds to load") != std::string::npos || line.find("Done (") != std::string::npos &&
+                        line.find(")! For help, type") != std::string::npos) {
                         status_ = ServerStatus::Running;
                         ready_ = true;
                         LOG_INFO("Сервер готов к работе!", "MC");
@@ -485,10 +486,24 @@ MinecraftServerManager::PlayerList MinecraftServerManager::get_players() {
         std::istringstream ss(names_str);
         std::string name;
         while (std::getline(ss, name, ',')) {
-            name.erase(0, name.find_first_not_of(" \t"));
-            name.erase(name.find_last_not_of(" \t") + 1);
-            if (!name.empty()) {
-                result.names.push_back(name);
+            // Удаляем Minecraft color/formatting коды (§X)
+            std::string clean;
+            for (size_t i = 0; i < name.size(); ++i) {
+                if ((name[i] == '\xC2' && i + 2 < name.size() && name[i + 1] == '\xA7') ||
+                    (name[i] == '\xA7')) {
+                    // §X в UTF-8 = 0xC2 0xA7, пропускаем § + следующий символ-код
+                    i += (name[i] == '\xC2') ? 2 : 1;
+                    continue;
+                }
+                clean.push_back(name[i]);
+            }
+            // Trim пробелы и управляющие символы
+            auto start = clean.find_first_not_of(" \t\r\n");
+            if (start == std::string::npos) continue;
+            auto end = clean.find_last_not_of(" \t\r\n");
+            std::string trimmed = clean.substr(start, end - start + 1);
+            if (!trimmed.empty()) {
+                result.names.push_back(trimmed);
             }
         }
     }

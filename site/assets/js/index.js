@@ -182,7 +182,7 @@ async function updatePlayers() {
 
         if (listEl) {
             listEl.innerHTML = '';
-            if (data.names && data.names.length > 0) {
+            if (data.online > 0 && data.names && data.names.length > 0) {
                 data.names.forEach(name => {
                     const item = document.createElement('div');
                     item.className = 'player-item';
@@ -274,44 +274,15 @@ function kickToAuth() {
     }
 }
 
-// ── Скачивание модпака (admin only) ────────────────────────────
+// ── Скачивание модпака (all roles) ──────────────────────────────
 
 function downloadModpack() {
-    const auth = getAuthHeader();
-    if (!auth) return;
+    const login = localStorage.getItem("auth_login");
+    const password = localStorage.getItem("auth_password");
+    if (!login || !password) return;
 
-    document.getElementById("status").innerText = "Скачиваю модпак...";
-
-    fetch("/api/download-modpack", {
-        headers: { "Authorization": auth }
-    })
-    .then(res => {
-        if (res.status === 401) { kickToAuth(); return; }
-        if (res.status === 403) { alert("Недостаточно прав"); return; }
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-        const disposition = res.headers.get("Content-Disposition") || "";
-        const match = disposition.match(/filename=(.+)/);
-        const filename = match ? match[1].replace(/"/g, '') : "modpack.zip";
-        return res.blob().then(blob => ({ blob, filename }));
-    })
-    .then(result => {
-        if (!result) return;
-        const { blob, filename } = result;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.style.display = "none";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    })
-    .catch(e => {
-        console.error("[DOWNLOAD]", e);
-        document.getElementById("status").innerText = "Ошибка скачивания модпака";
-    });
+    const authParam = btoa(login + ":" + password);
+    window.location.href = "/api/download-modpack?auth=" + encodeURIComponent(authParam);
 }
 
 // ── Отправка команды (admin only) ──────────────────────────────
