@@ -27,7 +27,7 @@ MSHost/
 │   │   ├── process_maanger.cpp
 │   │   └── process_manager.h
 │   │
-│   ├── workers/               # ← ВАЖНО: разделение процессов
+│   ├── workers/               # разделение процессов
 │   │   ├── mc_worker.cpp
 │   │   ├── mc_worker.h
 │   │   ├── web_worker.cpp
@@ -37,15 +37,15 @@ MSHost/
 │   │   ├── minecraft_sv_manager.cpp
 │   │   ├── caddy_manager.cpp
 │   │   ├── web_sv.cpp
-│   │   ├── rcon_client.cpp
-│   │   └── auth_service.cpp   # (пока нет, далее добавим)
+│   │   ├── rcon_client.cpp    # (WIP)
+│   │   └── auth_service.cpp   # (WIP)
 │   │
 │   ├── includes/
 │   │   ├── minecraft_sv_manager.h
 │   │   ├── caddy_manager.h
 │   │   ├── web_sv.h
-│   │   ├── rcon_client.h
-│   │   ├── auth_service.h
+│   │   ├── rcon_client.h      # (WIP)
+│   │   ├── auth_service.h     # (WIP)
 │   │   ├── logger.h
 │   │   ├── httplib.h
 │   │   ├── server_status.h
