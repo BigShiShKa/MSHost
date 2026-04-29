@@ -1,5 +1,5 @@
-#include "./includes/minecraftservermanager.h"
-#include "./includes/logger.h"
+#include "../includes/minecraft_sv_manager.h"
+#include "../includes/logger.h"
 
 #include <iostream>
 #include <vector>
@@ -158,7 +158,7 @@ std::string MinecraftServerManager::get_last_error_message(DWORD err) {
 /*                               START                                */
 /* ------------------------------------------------------------------ */
 void MinecraftServerManager::start() {
-    if (running_) {
+    if (status_ != ServerStatus::Stopped && status_ != ServerStatus::Dead) {
         LOG_WARNING("Сервер уже запущен.", "MC");
         return;
     }
@@ -225,8 +225,6 @@ void MinecraftServerManager::start() {
         LOG_CRITICAL("Прочитанный конфиг: " + config_.full_command, "MC");
 
         status_  = ServerStatus::Stopped;
-        running_ = false;
-        ready_   = false;
 
         CloseHandle(readPipeIn);
         CloseHandle(stdinPipe_);  stdinPipe_ = nullptr;
@@ -238,9 +236,6 @@ void MinecraftServerManager::start() {
     CloseHandle(writePipeOut);
     CloseHandle(readPipeIn);
 
-    running_ = true;
-    ready_   = false;
-
     LOG_INFO("Процесс сервера запущен успешно", "MC");
 
     output_thread_          = std::thread(&MinecraftServerManager::read_output,          this);
@@ -251,7 +246,7 @@ void MinecraftServerManager::start() {
 /*                                STOP                                */
 /* ------------------------------------------------------------------ */
 void MinecraftServerManager::stop() {
-    if (!running_) return;
+    if (status_ != ServerStatus::Running && status_ != ServerStatus::Starting) return;
 
     disconnect_rcon();
 
@@ -293,16 +288,13 @@ void MinecraftServerManager::stop() {
 /* ------------------------------------------------------------------ */
 /*                            ВСПОМОГАТЕЛЬНОЕ                         */
 /* ------------------------------------------------------------------ */
-bool MinecraftServerManager::is_running() const {
-    return running_ && ready_;
-}
 
 ServerStatus MinecraftServerManager::get_status() const {
     return status_;
 }
 
 void MinecraftServerManager::send_command(const std::string& cmd) {
-    if (!running_) {
+    if (status_ != ServerStatus::Running) {
         LOG_WARNING("Сервер не запущен — некуда слать команды.", "MC");
         return;
     }
@@ -335,7 +327,7 @@ void MinecraftServerManager::read_output() {
         DWORD bytesRead;
         std::string lineBuf;
 
-        while (running_) {
+        while (status_ != ServerStatus::Stopped && status_ != ServerStatus::Dead) {
             DWORD avail = 0;
             if (!PeekNamedPipe(readPipe_, nullptr, 0, nullptr, &avail, nullptr)) {
                 LOG_ERR("[read_output] Ошибка PeekNamedPipe.", "MC_IO");
@@ -357,11 +349,11 @@ void MinecraftServerManager::read_output() {
 
                     LOG_INFO(line, "MC_OUT");
 
-                    if (line.find("Dedicated server took") != std::string::npos &&
-                        line.find("seconds to load") != std::string::npos || line.find("Done (") != std::string::npos &&
-                        line.find(")! For help, type") != std::string::npos) {
+                    if ((line.find("Dedicated server took") != std::string::npos &&
+                        line.find("seconds to load") != std::string::npos) || 
+                        (line.find("Done (") != std::string::npos &&
+                        line.find(")! For help, type") != std::string::npos)) {
                         status_ = ServerStatus::Running;
-                        ready_ = true;
                         LOG_INFO("Сервер готов к работе!", "MC");
 
                         // Подключаем RCON в фоне
@@ -371,8 +363,6 @@ void MinecraftServerManager::read_output() {
                     } else if (line.find("Stopping server") != std::string::npos) {
                         status_ = ServerStatus::Stopping;
                         LOG_INFO("Обнаружена остановка сервера...", "MC");
-                    } else if (line.find("All dimensions are saved") != std::string::npos) {
-                        running_ = false;
                     }
                 }
             } else {
@@ -405,8 +395,6 @@ void MinecraftServerManager::monitor_process_exit() {
             if (readPipe_)          { CloseHandle(readPipe_);          readPipe_          = nullptr; }
         }
 
-        running_ = false;
-        ready_   = false;
         status_  = ServerStatus::Stopped;
 
         LOG_INFO("Статус сервера: Stopped", "MC");
@@ -426,7 +414,7 @@ void MinecraftServerManager::connect_rcon() {
     std::lock_guard lg(rcon_mutex_);
 
     for (int attempt = 0; attempt < rcon_config_.max_retries; ++attempt) {
-        if (!running_) return;  // сервер уже выключается
+        if (status_ != ServerStatus::Running && status_ != ServerStatus::Starting) return;  // сервер уже выключается
 
         if (rcon_.connect(rcon_config_.host, rcon_config_.port, rcon_config_.password)) {
             rcon_connected_ = true;
@@ -452,7 +440,7 @@ void MinecraftServerManager::disconnect_rcon() {
 
 MinecraftServerManager::PlayerList MinecraftServerManager::get_players() {
     PlayerList result;
-    if (!rcon_connected_ || !running_) return result;
+    if (!rcon_connected_ || (status_ != ServerStatus::Running && status_ != ServerStatus::Starting)) return result;
 
     std::lock_guard lg(rcon_mutex_);
     std::string response = rcon_.send_command("list");
@@ -512,7 +500,7 @@ MinecraftServerManager::PlayerList MinecraftServerManager::get_players() {
 }
 
 std::string MinecraftServerManager::rcon_command(const std::string& cmd) {
-    if (!rcon_connected_ || !running_) return "";
+    if (!rcon_connected_ || (status_ != ServerStatus::Running && status_ != ServerStatus::Starting)) return "";
 
     std::lock_guard lg(rcon_mutex_);
     return rcon_.send_command(cmd);

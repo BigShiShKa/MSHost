@@ -1,5 +1,5 @@
-#include "./includes/caddy_manager.h"
-#include "./includes/logger.h"
+#include "../includes/caddy_manager.h"
+#include "../includes/logger.h"
 
 #include <vector>
 

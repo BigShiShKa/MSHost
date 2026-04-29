@@ -10,6 +10,7 @@ bin/
 # IDE
 .vscode/
 .vs/
+.claude/
 *.suo
 *.user
 CMakeSettings.json

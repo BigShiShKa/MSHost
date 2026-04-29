@@ -7,7 +7,6 @@
 #include <mutex>
 #include <chrono>
 #include <iomanip>
-#include <atomic>
 #include <sstream>
 #include <filesystem>
 #include <windows.h>
@@ -24,165 +23,180 @@ public:
     }
 
     void init(bool consoleOutput = true,
-              const std::string& filename    = "server.log",
+              const std::string& filename = "mc.log",
               const std::string& webFilename = "web.log")
     {
         std::lock_guard<std::mutex> lock(mutex_);
 
-        auto now      = std::chrono::system_clock::now();
-        auto now_time = std::chrono::system_clock::to_time_t(now);
-        {
-            std::ostringstream oss;
-            oss << std::put_time(std::localtime(&now_time), "%Y-%m-%d_%H-%M-%S");
-            sessionDirName_ = oss.str();
-        }
-
-        auto open_file = [](const std::string& path, std::ofstream& f) {
-            if (path.empty()) return false;
-            f.open(path, std::ios::out | std::ios::app);
-            return f.is_open();
-        };
-
-        fileOutput_ = open_file(filename, logFile_);
-        webOutput_  = open_file(webFilename, webFile_);
         consoleOutput_ = consoleOutput;
+        archived_ = false;
+
+        // ─── session folder ───
+        auto now = std::chrono::system_clock::now();
+        auto now_time = std::chrono::system_clock::to_time_t(now);
+
+        std::ostringstream oss;
+        oss << std::put_time(std::localtime(&now_time), "%Y-%m-%d_%H-%M-%S");
+        sessionDirName_ = oss.str();
+
+        fs::create_directories("./logs");
+        fs::create_directories("./logs/" + sessionDirName_);
+
+        // ─── open files ───
+        logFile_.open(filename, std::ios::out | std::ios::trunc | std::ios::binary);
+        webFile_.open(webFilename, std::ios::out | std::ios::trunc | std::ios::binary);
+
+        if (logFile_.is_open()) write_bom(logFile_);
+        if (webFile_.is_open()) write_bom(webFile_);
     }
 
-    void setMinLevel(LogLevel level) { minLevel_ = level; }
+    void setMinLevel(LogLevel level) {
+        minLevel_ = level;
+    }
 
     void log(LogLevel level, const std::string& message, const std::string& module = "") {
         if (level < minLevel_) return;
 
-        std::string cleaned = message;
-        if (module == "MC_OUT") {
-            cleaned = strip_mc_timestamp(message);
-        }
-
         const char* levelStr =
-            level == LogLevel::DEBUG    ? "DEBUG"  :
-            level == LogLevel::INFO     ? "INFO"   :
-            level == LogLevel::WARNING  ? "WARN"   :
-            level == LogLevel::ERR      ? "ERROR"  : "CRIT";
+            level == LogLevel::DEBUG ? "DEBUG" :
+            level == LogLevel::INFO ? "INFO" :
+            level == LogLevel::WARNING ? "WARN" :
+            level == LogLevel::ERR ? "ERROR" : "CRIT";
 
-        auto now      = std::chrono::system_clock::now();
+        auto now = std::chrono::system_clock::now();
         auto now_time = std::chrono::system_clock::to_time_t(now);
 
         std::ostringstream oss;
         oss << "[" << std::put_time(std::localtime(&now_time), "%Y-%m-%d %H:%M:%S") << "] "
-            << "[" << levelStr << "] "
-            << (module.empty() ? "" : "[" + module + "] ")
-            << cleaned;
+            << "[" << levelStr << "] ";
+
+        if (!module.empty())
+            oss << "[" << module << "] ";
+
+        oss << message;
 
         std::string out = oss.str();
 
-        std::lock_guard<std::mutex> guard(mutex_);
+        std::lock_guard<std::mutex> lock(mutex_);
 
+        // ─── console ───
         if (consoleOutput_) {
             write_console_utf8(out);
         }
 
-        bool isWeb = (module == "WEB" || module == "HTTP" || module == "API");
-        if (fileOutput_ && !isWeb) logFile_ << out << std::endl;
-        if (webOutput_  && isWeb)  webFile_ << out << std::endl;
+        // ─── file ───
+        if (fileOutput_ && logFile_.is_open()) {
+            logFile_ << out << '\n';
+            logFile_.flush();
+        }
+
+        // ─── web log routing ───
+        if (webOutput_ && webFile_.is_open()) {
+            if (module == "WEB" || module == "HTTP" || module == "API") {
+                webFile_ << out << '\n';
+                webFile_.flush();
+            }
+        }
     }
 
     void finalize() {
         std::lock_guard<std::mutex> lock(mutex_);
-        try {
-            if (archived_) return;
-            archived_ = true;
 
-            if (logFile_.is_open()) logFile_.close();
-            if (webFile_.is_open()) webFile_.close();
+        if (archived_) return;
+        archived_ = true;
 
-            fs::path logsRoot = "./logs";
-            if (!fs::exists(logsRoot)) fs::create_directory(logsRoot);
+        if (logFile_.is_open()) logFile_.close();
+        if (webFile_.is_open()) webFile_.close();
 
-            fs::path sessionDir = logsRoot / sessionDirName_;
-            if (!fs::exists(sessionDir)) fs::create_directory(sessionDir);
+        fs::path logsRoot = "./logs";
+        fs::path sessionDir = logsRoot / sessionDirName_;
 
-            auto safe_copy_and_overwrite = [&](const char* src, const char* latest) {
-                fs::path srcPath{src};
-                if (!fs::exists(srcPath)) return;
+        fs::create_directories(sessionDir);
 
-                fs::path latestPath = logsRoot / latest;
-                std::error_code ec;
-                fs::remove(latestPath, ec);
-                fs::copy_file(srcPath, sessionDir / srcPath.filename(), fs::copy_options::overwrite_existing, ec);
-                fs::copy_file(srcPath, latestPath, fs::copy_options::overwrite_existing, ec);
-                fs::remove(srcPath, ec);
-            };
+        auto copy = [&](const std::string& file) {
+            fs::path src(file);
+            if (!fs::exists(src)) return;
 
-            if (fileOutput_) safe_copy_and_overwrite("server.log", "latest_server.log");
-            if (webOutput_)  safe_copy_and_overwrite("web.log",    "latest_web.log");
-        } catch (const std::exception& e) {
-            std::cerr << "[LOGGER] finalize error: " << e.what() << std::endl;
-        }
+            fs::copy_file(src, sessionDir / src.filename(),
+                          fs::copy_options::overwrite_existing);
+        };
+
+        copy("mc.log");
+        copy("web.log");
     }
 
-    ~Logger() { try { finalize(); } catch (...) {} }
+    ~Logger() {
+        try { finalize(); } catch (...) {}
+    }
 
 private:
-    Logger() : consoleOutput_(true), fileOutput_(false), webOutput_(false),
-               minLevel_(LogLevel::INFO), archived_(false) {}
+    Logger()
+        : consoleOutput_(true),
+          fileOutput_(true),
+          webOutput_(true),
+          archived_(false),
+          minLevel_(LogLevel::INFO) {}
 
-    Logger(const Logger&)            = delete;
+    Logger(const Logger&) = delete;
     Logger& operator=(const Logger&) = delete;
 
-    // Убираем MC-таймстемп вида [HH:MM:SS] без regex
-    static std::string strip_mc_timestamp(const std::string& msg) {
-        // Формат: [HH:MM:SS] текст...
-        if (msg.size() >= 11 && msg[0] == '[' &&
-            msg[3] == ':' && msg[6] == ':' && msg[9] == ']')
-        {
-            size_t start = 10;
-            while (start < msg.size() && msg[start] == ' ') ++start;
-            return msg.substr(start);
-        }
-        return msg;
+    // ─────────────────────────────
+    // UTF-8 BOM
+    // ─────────────────────────────
+    static void write_bom(std::ofstream& f) {
+        static const unsigned char bom[] = {0xEF, 0xBB, 0xBF};
+        f.write(reinterpret_cast<const char*>(bom), 3);
     }
 
-    // Вывод UTF-8 в Windows-консоль через WriteConsoleW
+    // ─────────────────────────────
+    // UTF-8 → WinAPI console
+    // ─────────────────────────────
     static void write_console_utf8(const std::string& utf8) {
-#ifdef _WIN32
         HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
         if (hOut == INVALID_HANDLE_VALUE) return;
 
-        // UTF-8 → wide
-        int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(),
-                                        static_cast<int>(utf8.size()), nullptr, 0);
+        int wlen = MultiByteToWideChar(CP_UTF8, 0,
+                                       utf8.c_str(),
+                                       (int)utf8.size(),
+                                       nullptr, 0);
+
         if (wlen <= 0) return;
 
         std::wstring wstr(wlen, L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(),
-                            static_cast<int>(utf8.size()), wstr.data(), wlen);
+
+        MultiByteToWideChar(CP_UTF8, 0,
+                            utf8.c_str(),
+                            (int)utf8.size(),
+                            wstr.data(), wlen);
+
         wstr += L'\n';
 
         DWORD written;
-        WriteConsoleW(hOut, wstr.c_str(), static_cast<DWORD>(wstr.size()), &written, nullptr);
-#else
-        std::cout << utf8 << '\n';
-#endif
+        WriteConsoleW(hOut, wstr.c_str(), (DWORD)wstr.size(), &written, nullptr);
     }
 
+private:
     std::ofstream logFile_;
     std::ofstream webFile_;
 
     std::mutex mutex_;
+
     bool consoleOutput_;
-    bool fileOutput_;
-    bool webOutput_;
+    bool fileOutput_ = true;
+    bool webOutput_ = true;
     bool archived_;
+
     LogLevel minLevel_;
 
     std::string sessionDirName_;
 };
 
-// ── Макросы ─────────────────────────────────────────────────────────────
-#define LOG_DEBUG(msg, module)    Logger::instance().log(LogLevel::DEBUG,    msg, module)
-#define LOG_INFO(msg, module)     Logger::instance().log(LogLevel::INFO,     msg, module)
-#define LOG_WARNING(msg, module)  Logger::instance().log(LogLevel::WARNING,  msg, module)
-#define LOG_ERR(msg, module)      Logger::instance().log(LogLevel::ERR,      msg, module)
+// ── macros ─────────────────────────────
+
+#define LOG_DEBUG(msg, module)    Logger::instance().log(LogLevel::DEBUG, msg, module)
+#define LOG_INFO(msg, module)     Logger::instance().log(LogLevel::INFO, msg, module)
+#define LOG_WARNING(msg, module)  Logger::instance().log(LogLevel::WARNING, msg, module)
+#define LOG_ERR(msg, module)      Logger::instance().log(LogLevel::ERR, msg, module)
 #define LOG_CRITICAL(msg, module) Logger::instance().log(LogLevel::CRITICAL, msg, module)
 
-#endif // LOGGER_H
+#endif

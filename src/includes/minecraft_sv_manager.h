@@ -19,28 +19,27 @@
 #include <vector>
 #include "json.hpp"
 #include "rcon_client.h"
+#include "server_status.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-/* ===== Перечисление статусов ===== */
-enum class ServerStatus {
-    Stopped,
-    Starting,
-    Running,
-    Stopping
-};
-
-inline constexpr const char*  status_text_narrow[] = {
-    "Stopped", "Starting", "Running", "Stopping", "Error"
-};
+inline const char* to_string(ServerStatus s) {
+    switch (s) {
+        case ServerStatus::Stopped:  return "Stopped";
+        case ServerStatus::Starting: return "Starting";
+        case ServerStatus::Running:  return "Running";
+        case ServerStatus::Stopping: return "Stopping";
+        case ServerStatus::Dead:    return "Dead";
+        default: return "Unknown";
+    }
+}
 inline constexpr const wchar_t* status_text_wide[] = {
-    L"Stopped", L"Starting", L"Running", L"Stopping", L"Error"
+    L"Stopped", L"Starting", L"Running", L"Stopping", L"Dead"
 };
 
-// Узкий поток
 inline std::ostream& operator<<(std::ostream& os, ServerStatus s) {
-    return os << status_text_narrow[static_cast<int>(s)];
+    return os << to_string(s);
 }
 
 // Широкий поток
@@ -57,7 +56,6 @@ public:
     void start();
     void stop();
 
-    bool         is_running() const;   // true, когда сервер «готов»
     ServerStatus get_status()  const;  // Текущий статус
 
     void send_command(const std::string& command);  // Передать консольную команду
@@ -110,8 +108,6 @@ private:
     static std::string get_last_error_message(DWORD error_code);
 
     /* Состояние */
-    std::atomic<bool>      running_{false};
-    std::atomic<bool>      ready_{false};
     std::atomic<ServerStatus> status_{ServerStatus::Stopped};
 
     /* IPC-хендлы */

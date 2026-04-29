@@ -1,0 +1,61 @@
+Архитектура:
+
+MSHost/
+├── README.md
+├── launch.bat
+├── launch_args.txt
+├── CMakeLists.txt
+|
+├── bin/
+├── caddy/
+├── logs/
+├── site/
+│   ├── assets/
+│   │   ├── js/
+│   │   │   └── index.js
+│   │   ├── css/
+│   │   │   └── index.css
+│   ├── auth.html
+│   ├── favicon.ico/favicon.png 
+│   └── index.html
+├── src/
+│   ├── main.cpp
+│   │
+│   ├── core/                  # ← ядро (CLI + управление)
+│   │   ├── application.cpp
+│   │   ├── application.h
+│   │   ├── process_maanger.cpp
+│   │   └── process_manager.h
+│   │
+│   ├── workers/               # ← ВАЖНО: разделение процессов
+│   │   ├── mc_worker.cpp
+│   │   ├── mc_worker.h
+│   │   ├── web_worker.cpp
+│   │   └── web_worker.h
+│   │
+│   ├── services/              # ← бизнес-логика (НЕ процессы)
+│   │   ├── minecraft_sv_manager.cpp
+│   │   ├── caddy_manager.cpp
+│   │   ├── web_sv.cpp
+│   │   ├── rcon_client.cpp
+│   │   └── auth_service.cpp   # (пока нет, далее добавим)
+│   │
+│   ├── includes/
+│   │   ├── minecraft_sv_manager.h
+│   │   ├── caddy_manager.h
+│   │   ├── web_sv.h
+│   │   ├── rcon_client.h
+│   │   ├── auth_service.h
+│   │   ├── logger.h
+│   │   ├── httplib.h
+│   │   ├── server_status.h
+│   │   └── json.hpp
+│   │
+│   ├── utils/
+│   │   ├── ipc/
+│   │   │   ├── ipc_client.h
+│   │   │   ├── ipc_client.cpp
+│   │   │   ├── ipc_server.h
+│   │   │   └── ipc_server.cpp
+│   │   ├── console.cpp
+│   │   └── console.h

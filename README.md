@@ -192,19 +192,22 @@ viewer:viewerpass:user
 ```
 MSHost/
 ├── src/
+|   ├── application.cpp
 │   ├── main.cpp                    # Точка входа, CLI
-│   ├── MinecraftServerManager.cpp  # Управление MC сервером
-│   ├── CaddyManager.cpp           # Управление Caddy
-│   ├── httpServer.cpp              # HTTP API
+│   ├── minecraft_sv_manager.cpp  # Управление MC сервером
+│   ├── caddy_manager.cpp           # Управление Caddy
+│   ├── web_sv.cpp              # HTTP API
 │   ├── rcon_client.cpp             # RCON клиент
 │   └── includes/
-│       ├── minecraftservermanager.h
+│       ├── minecraft_sv_manager.h
 │       ├── caddy_manager.h
-│       ├── httpServer.h
+│       ├── web_sv.h
 │       ├── rcon_client.h
 │       ├── logger.h
 │       ├── httplib.h               # cpp-httplib (header-only)
-│       └── json.hpp                # nlohmann/json (header-only)
+│       ├── json.hpp                # nlohmann/json (header-only)
+│       ├── application.h
+│       └── auth_service.h
 ├── site/                           # Фронтенд
 │   ├── index.html
 │   ├── auth.html

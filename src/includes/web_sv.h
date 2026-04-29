@@ -1,6 +1,6 @@
 #pragma once
 
-#include "minecraftservermanager.h"
+#include "minecraft_sv_manager.h"
 #include "httplib.h"
 #include "json.hpp"
 #include <iostream>
@@ -8,6 +8,7 @@
 #include <functional>
 #include <unordered_map>
 #include <chrono>
+#include "server_status.h"
 
 struct WebConfig {
     int port                 = 8080;
@@ -29,7 +30,7 @@ struct WebConfig {
 class HttpServer {
 public:
     HttpServer(MinecraftServerManager& manager,
-               std::atomic<bool>& running,
+               std::atomic<ServerStatus>& status,
                const WebConfig& config);
 
     HttpServer(const HttpServer&) = delete;
@@ -46,7 +47,7 @@ public:
     std::function<void()> on_exit;
 
 private:
-    std::atomic<bool>& running_;
+    std::atomic<ServerStatus>& status_;
     MinecraftServerManager& manager_;
     WebConfig config_;
     httplib::Server svr;
@@ -59,6 +60,9 @@ private:
     };
     std::unordered_map<std::string, Credential> credentials_;  // login → {password, role}
     std::mutex credentials_mx_;
+    std::unordered_map<std::string, std::string> sessions_; // token -> role
+    std::mutex sessions_mx_;
+    std::string generate_token();
 
     // Rate limiter
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> rate_map_;

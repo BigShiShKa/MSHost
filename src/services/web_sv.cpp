@@ -1,14 +1,17 @@
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "./includes/httpServer.h"
 #include <algorithm>
 #include <fstream>
 #include <deque>
 #include <limits>
-#include <windows.h>
-#include <ws2tcpip.h>
 
-#include "./includes/logger.h"
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+
+#include "../includes/web_sv.h"
+#include "../includes/logger.h"
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -112,9 +115,9 @@ static std::string sanitize_utf8(const std::string& in) {
 // Конструктор
 // ────────────────────────────────────────────────────────────────
 HttpServer::HttpServer(MinecraftServerManager& manager,
-                       std::atomic<bool>& running,
+                       std::atomic<ServerStatus>& status,
                        const WebConfig& config)
-    : running_(running),
+    : status_(status),
       manager_(manager),
       config_(config)
 {
@@ -154,6 +157,20 @@ void HttpServer::load_credentials() {
     LOG_INFO("Учётные данные загружены, всего: " + std::to_string(credentials_.size()), "WEB");
 }
 
+std::string HttpServer::generate_token() {
+    static thread_local std::mt19937 rng(std::random_device{}());
+    static const char* chars =
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+    std::uniform_int_distribution<> dist(0, 61);
+
+    std::string token(32, ' ');
+    for (auto& c : token) {
+        c = chars[dist(rng)];
+    }
+    return token;
+}
+
 void HttpServer::update_config(const WebConfig& config) {
     config_ = config;
     load_credentials();
@@ -169,10 +186,10 @@ std::string HttpServer::check_auth(const std::string& login, const std::string& 
 }
 
 json HttpServer::get_status_json() {
-    ServerStatus status = manager_.get_status();
+    ServerStatus MCstatus = manager_.get_status();
     return json{
-        {"status",      status_to_string(status)},
-        {"status_code", status_to_code(status)},
+        {"status",      status_to_string(MCstatus)},
+        {"status_code", status_to_code(MCstatus)},
         {"ip",          config_.server_ip},
         {"port",        config_.server_port},
         {"version",     config_.server_version}
