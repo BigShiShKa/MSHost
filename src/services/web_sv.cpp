@@ -362,18 +362,18 @@ void HttpServer::setup_routes() {
 
     // ── GET /api/download-modpack (all roles) ──
     svr.Get("/api/download-modpack", [this](const httplib::Request&, httplib::Response& res) {
-        if (!fs::exists(config_.modpack_path)) {
-            LOG_ERR("Файл не существует: " + config_.modpack_path, "WEB");
+        if (!fs::exists(config_.modpack_file)) {
+            LOG_ERR("Файл не существует: " + config_.modpack_file, "WEB");
             res.status = 404;
             res.set_content("Файл не найден", "text/plain");
             return;
         }
 
         auto file_stream = std::make_shared<std::ifstream>(
-            config_.modpack_path, std::ios::binary | std::ios::ate);
+            config_.modpack_file, std::ios::binary | std::ios::ate);
 
         if (!*file_stream) {
-            LOG_ERR("Не удалось открыть файл сборки: " + config_.modpack_path, "WEB");
+            LOG_ERR("Не удалось открыть файл сборки: " + config_.modpack_file, "WEB");
             res.status = 500;
             res.set_content("Ошибка открытия файла", "text/plain");
             return;
@@ -384,7 +384,7 @@ void HttpServer::setup_routes() {
 
         res.set_header("Content-Type", "application/zip");
         res.set_header("Content-Disposition",
-            "attachment; filename=" + fs::path(config_.modpack_path).filename().string());
+            "attachment; filename=" + fs::path(config_.modpack_file).filename().string());
         res.set_header("Content-Length", std::to_string(file_size));
         res.set_header("Cache-Control", "no-cache");
 
@@ -563,8 +563,8 @@ void HttpServer::run() {
     if (!std::ifstream(config_.logs_path)) {
         LOG_ERR("Лог-файл не найден: " + config_.logs_path, "WEB");
     }
-    if (!std::ifstream(config_.modpack_path)) {
-        LOG_ERR("Файл сборки модов не найден: " + config_.modpack_path, "WEB");
+    if (!std::ifstream(config_.modpack_file)) {
+        LOG_ERR("Файл сборки модов не найден: " + config_.modpack_file, "WEB");
     }
     if (!fs::exists(config_.web_root)) {
         LOG_ERR("Директория с сайтом не найдена: " + config_.web_root, "WEB");

@@ -18,6 +18,8 @@ CMakeSettings.json
 # Runtime
 logs/
 *.log
+runtime/minecraft/forge/*
+runtime/minecraft/neoforge/*
 
 # Sensitive
 tokens

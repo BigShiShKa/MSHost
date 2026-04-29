@@ -5,8 +5,8 @@ title MSHost by BaDRiVeR
 cd /d "%~dp0"
 
 rem --- Проверяем существование mshost.exe ---
-if not exist "bin\mshost.exe" (
-    echo ERROR: mshost.exe not found in bin\ directory!
+if not exist "build\bin\Release\mshost.exe" (
+    echo ERROR: mshost.exe not found in build\bin\Release directory!
     pause
     exit /b 1
 )

@@ -13,8 +13,8 @@
 struct WebConfig {
     int port                 = 8080;
     std::string tokens_file  = "tokens";
-    std::string logs_path;
-    std::string modpack_path;
+    std::string game_log_file;
+    std::string modpack_file;
     std::string web_root     = "./site";
     int upload_limit_mb      = 7;
     int max_log_lines        = 500;

@@ -1,0 +1,43 @@
+{
+  "general": {
+    "folder": "C:/mshost/folder"
+  },
+
+  "game_server": {
+
+    "java": {
+      "path": "C:/Program Files/Java/jdk-21.0.10/bin/java.exe",
+      "jvm_args": [
+        "-Xmx16G"
+      ]
+    },
+
+    "directory": "C:/Game/Server/Folder",
+    "forge_args": "@libraries/net/neoforged/neoforge/21.1.228/win_args.txt",
+
+    "rcon": {
+      "enabled": false,
+      "host": "127.0.0.1",
+      "port": 25575,
+      "password": "test123",
+      "retry_interval": 3000,
+      "max_retries": 12
+    },
+    
+    "stop_timeout_ms": 20000,
+    "force_kill_timeout_ms": 5000
+  },
+
+  "web": {
+    "port": 8080,
+    "caddy_enabled": true,
+    "tokens_file": "tokens_ex",
+    "game_log_file": "C:/game/log/file.log",
+    "modpack_file": "C:/path/to/modpack.rar",
+    "web_root": "./site",
+    "upload_limit": 9,
+    "server_ip": "127.0.0.1",
+    "server_port": 25565,
+    "server_version": "NeoForge 1.21.1"
+  }
+}

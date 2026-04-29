@@ -24,8 +24,8 @@ static WebConfig load_web_config(const json& config) {
 
     wc.port             = web.value("port", 8080);
     wc.tokens_file      = web.value("tokens_file", "tokens");
-    wc.logs_path        = web.value("logs_path", "server.log");
-    wc.modpack_path     = web.value("modpack_path", "");
+    wc.game_log_file        = web.value("game_log_file", "server.log");
+    wc.modpack_file     = web.value("modpack_file", "");
     wc.web_root         = web.value("web_root", "./site");
     wc.upload_limit_mb  = web.value("upload_limit", 7);
     wc.max_log_lines    = web.value("max_log_lines", 500);
