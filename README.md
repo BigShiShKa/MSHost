@@ -14,6 +14,8 @@ MSHost/
 │
 ├── bin/
 ├── caddy/
+├── instances/ # WIP
+├── runtime/ # WIP
 ├── logs/
 ├── site/
 │   ├── assets/
@@ -302,6 +304,18 @@ cmake -B build
 
 ## Дальнейшее развитие
 
+* Переход к системе instances/runtime:
+ - Ввести Runtime
+ - Ввести Instance
+ - Ликвидация config.json как god-object
+ - Разделение ответсвенности minecraft_sv_manager (god-class)
+ - Упростить mc_worker: 
+    * получил START
+    * получил команду
+    * запустил процесс
+    * стримит stdout
+ - Ввести InstanceManager
+ 
 * auth_service (роли, JWT)
 * полноценный REST API
 * WebSocket логов
