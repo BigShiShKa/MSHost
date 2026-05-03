@@ -1,4 +1,4 @@
-#include "../includes/rcon_client.h"
+#include "rcon_client.h"
 
 #include <vector>
 #include <cstring>

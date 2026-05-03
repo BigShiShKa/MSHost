@@ -1,4 +1,4 @@
-#include "../includes/minecraft_sv_manager.h"
+#include "minecraft_sv_manager.h"
 #include "../includes/logger.h"
 
 #include <iostream>

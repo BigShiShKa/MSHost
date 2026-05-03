@@ -10,7 +10,7 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 
-#include "../includes/web_sv.h"
+#include "web_sv.h"
 #include "../includes/logger.h"
 
 using json = nlohmann::json;

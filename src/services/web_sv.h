@@ -1,14 +1,15 @@
 #pragma once
 
 #include "minecraft_sv_manager.h"
-#include "httplib.h"
-#include "json.hpp"
+#include "server_status.h"
+#include <httplib.h>
+#include <json.hpp>
+
 #include <iostream>
 #include <atomic>
 #include <functional>
 #include <unordered_map>
 #include <chrono>
-#include "server_status.h"
 
 struct WebConfig {
     int port                 = 8080;

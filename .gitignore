@@ -18,12 +18,11 @@ CMakeSettings.json
 # Runtime
 logs/
 *.log
-runtime/minecraft/forge/*
-runtime/minecraft/neoforge/*
-instances/*
+storage/instances/*
+storage/runtimes/*
 
 # Sensitive
-tokens
+site/storage/tokens
 config.json
 
 # Backups (replaced by git)

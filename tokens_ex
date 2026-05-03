@@ -1,4 +1,0 @@
-# Формат: login:password:role
-# Роли: admin, user (профили и сессии в разработке)
-admin:admin:admin
-user:user:user
